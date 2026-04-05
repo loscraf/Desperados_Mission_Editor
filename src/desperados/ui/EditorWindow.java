@@ -3,6 +3,7 @@ package desperados.ui;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.ArrayList;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.*;
@@ -56,6 +57,11 @@ public class EditorWindow {
 			//FileService.setGameDir(gameDir);
 		//}
 		dvdLoaded = false;
+		historyStack = new ArrayList<String[]>();
+		historyCaret = new ArrayList<Integer>();
+		historyScroll = new ArrayList<Integer>();
+		historyActiveItem = new ArrayList<Integer>();
+		historyIndex = -1;
 		initComboItems();
 	}
 
@@ -101,6 +107,17 @@ public class EditorWindow {
 	private Text searchText;
 	private String[] originalComboTexts;
 	private Combo combo;
+	
+	private ArrayList<String[]> historyStack;
+	private ArrayList<Integer> historyCaret;
+	private ArrayList<Integer> historyScroll;
+	private ArrayList<Integer> historyActiveItem;
+	private int historyIndex;
+	private static final int MAX_HISTORY = 1000;
+	private Button undoButton;
+	private Button redoButton;
+	private boolean isRestoring = false;
+	private boolean isFirstChange = true;
 	
 	private int activeComboItem;
 	private String[] comboItems;
@@ -458,6 +475,33 @@ public class EditorWindow {
 		gridData.minimumWidth = 500;
 		contentComposite.setLayoutData(gridData);
 		
+		Composite undoRedoComposite = new Composite(contentComposite, SWT.NONE);
+		GridLayout undoRedoLayout = new GridLayout();
+		undoRedoLayout.numColumns = 2;
+		undoRedoComposite.setLayout(undoRedoLayout);
+		GridData undoRedoData = new GridData(GridData.FILL_HORIZONTAL);
+		undoRedoComposite.setLayoutData(undoRedoData);
+		
+		undoButton = new Button(undoRedoComposite, SWT.NONE);
+		undoButton.setText("Deshacer (Ctrl+Z)");
+		undoButton.setEnabled(false);
+		undoButton.addSelectionListener(new SelectionAdapter() {
+	        @Override
+	        public void widgetSelected(SelectionEvent event) {
+	            undo();
+	        }
+	    });
+		
+		redoButton = new Button(undoRedoComposite, SWT.NONE);
+		redoButton.setText("Rehacer (Ctrl+Y)");
+		redoButton.setEnabled(false);
+		redoButton.addSelectionListener(new SelectionAdapter() {
+	        @Override
+	        public void widgetSelected(SelectionEvent event) {
+	            redo();
+	        }
+	    });
+		
 		Button checkBoxElements = new Button(contentComposite, SWT.CHECK);
 		checkBoxElements.setText("Draw Elements");
 		checkBoxElements.setSelection(drawElements);
@@ -605,12 +649,22 @@ public class EditorWindow {
 			}
 			private void widgetSelected(int selectionIndex) {
 				if (selectionIndex != activeComboItem) {
+					// Guardar el estado actual de la sección anterior en comboTexts
+					String currentContent = text.getText();
+					comboTexts[activeComboItem] = currentContent;
+					originalComboTexts[activeComboItem] = currentContent;
 					textPositions[activeComboItem] = text.getTopIndex();
+					// Guardar este cambio de sección en el historial
+					saveToHistory();
+					
 					setConsoleText("");
 					activeComboItem = selectionIndex;
 					searchText.setText("");
+					isRestoring = true;
 					text.setText(comboTexts[selectionIndex]);
+					isRestoring = false;
 					text.setTopIndex(textPositions[selectionIndex]);
+					isFirstChange = true;
 				}
 			}
 	    });
@@ -618,11 +672,23 @@ public class EditorWindow {
 	    text = new StyledText(contentComposite, SWT.MULTI | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
 	    text.setFont(new Font(display, new FontData("Courier New", 10, SWT.NORMAL)));
 	    text.setLayoutData(new GridData(GridData.FILL_BOTH));
+	    isRestoring = true;
 	    text.setText(comboTexts[activeComboItem]);
+	    isRestoring = false;
+	    isFirstChange = true;
 		text.addModifyListener(new ModifyListener() {
 			public void modifyText(ModifyEvent event) {
-				comboTexts[activeComboItem] = text.getText();
-				text.redraw();
+				if (!isRestoring) {
+					if (isFirstChange) {
+						isFirstChange = false;
+						saveToHistory();
+					}
+					String currentContent = text.getText();
+					comboTexts[activeComboItem] = currentContent;
+					originalComboTexts[activeComboItem] = currentContent;
+					text.redraw();
+					saveToHistory();
+				}
 			}
 		});
 		
@@ -639,6 +705,13 @@ public class EditorWindow {
 		text.addKeyListener(new KeyAdapter() {
 		    @Override
 		    public void keyPressed(KeyEvent e) {
+		    	if (e.stateMask == SWT.CTRL && e.keyCode == 'z') {
+		    		undo();
+		    		e.doit = false;
+		    	} else if (e.stateMask == SWT.CTRL && e.keyCode == 'y') {
+		    		redo();
+		    		e.doit = false;
+		    	}
 		        if (e.stateMask == SWT.CTRL && e.keyCode == 'a') {
 		            text.selectAll();
 		            e.doit = false;
@@ -759,7 +832,9 @@ public class EditorWindow {
 
 	private void applySearchFilter(String searchTerm) {
 		if (searchTerm.isEmpty()) {
+			isRestoring = true;
 			text.setText(originalComboTexts[activeComboItem]);
+			isRestoring = false;
 			comboTexts[activeComboItem] = originalComboTexts[activeComboItem];
 			return;
 		}
@@ -779,7 +854,116 @@ public class EditorWindow {
 			result = result.substring(0, result.length() - 1);
 		}
 		
+		isRestoring = true;
 		text.setText(result);
+		isRestoring = false;
 		comboTexts[activeComboItem] = result;
+	}
+
+	private void saveToHistory() {
+		// Remove any states after current position (branching)
+		while (historyStack.size() > historyIndex + 1) {
+			historyStack.remove(historyStack.size() - 1);
+			historyCaret.remove(historyCaret.size() - 1);
+			historyScroll.remove(historyScroll.size() - 1);
+			historyActiveItem.remove(historyActiveItem.size() - 1);
+		}
+		
+		// Create a copy of current comboTexts state
+		String[] state = new String[comboTexts.length];
+		for (int i = 0; i < comboTexts.length; i++) {
+			state[i] = comboTexts[i];
+		}
+		
+		// Save caret and scroll position
+		int caret = text != null ? text.getCaretOffset() : 0;
+		int scroll = text != null ? text.getTopIndex() : 0;
+		
+		// Add new state to history
+		historyStack.add(state);
+		historyCaret.add(caret);
+		historyScroll.add(scroll);
+		historyActiveItem.add(activeComboItem);
+		historyIndex++;
+		
+		// Limit history size to MAX_HISTORY
+		if (historyStack.size() > MAX_HISTORY) {
+			historyStack.remove(0);
+			historyCaret.remove(0);
+			historyScroll.remove(0);
+			historyActiveItem.remove(0);
+			historyIndex--;
+		}
+		
+		updateUndoRedoButtons();
+	}
+
+	private void undo() {
+		if (historyIndex > 0) {
+			historyIndex--;
+			restoreState(historyIndex);
+			updateUndoRedoButtons();
+			text.setFocus();
+		}
+	}
+
+	private void redo() {
+		if (historyIndex < historyStack.size() - 1) {
+			historyIndex++;
+			restoreState(historyIndex);
+			updateUndoRedoButtons();
+			text.setFocus();
+		}
+	}
+
+	private void restoreState(int index) {
+		String[] state = historyStack.get(index);
+		int caretPos = historyCaret.get(index);
+		int scrollPos = historyScroll.get(index);
+		int restoredActiveItem = historyActiveItem.get(index);
+		
+		// Restore all comboTexts and originalComboTexts
+		for (int i = 0; i < comboTexts.length; i++) {
+			comboTexts[i] = state[i];
+			originalComboTexts[i] = state[i];
+		}
+		
+		// Change to the section where this change was made
+		if (restoredActiveItem != activeComboItem) {
+			activeComboItem = restoredActiveItem;
+			combo.select(activeComboItem);
+		}
+		
+		// Update the displayed text
+		isRestoring = true;
+		text.setText(comboTexts[activeComboItem]);
+		
+		// Restore cursor and scroll position
+		try {
+			if (caretPos >= 0 && caretPos <= text.getCharCount()) {
+				text.setCaretOffset(caretPos);
+			} else {
+				text.setCaretOffset(0);
+			}
+		} catch (Exception e) {
+			text.setCaretOffset(0);
+		}
+		
+		try {
+			text.setTopIndex(scrollPos);
+		} catch (Exception e) {
+			text.setTopIndex(0);
+		}
+		
+		isRestoring = false;
+	}
+
+	private void updateUndoRedoButtons() {
+		if (undoButton != null) {
+			undoButton.setEnabled(historyIndex > 0);
+		}
+		if (redoButton != null) {
+			redoButton.setEnabled(historyIndex < historyStack.size() - 1);
+		}
 	}
 }
