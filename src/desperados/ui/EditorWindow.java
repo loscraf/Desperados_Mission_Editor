@@ -104,9 +104,15 @@ public class EditorWindow {
 	private StyledText text;
 	private StyledText textConsole;
 	private StyledText textCoords;
+	private StyledText elementInfo;
 	private Text searchText;
 	private String[] originalComboTexts;
 	private Combo combo;
+	private desperados.dvd.elements.Element currentElement;
+	private desperados.dvd.elements.Element selectedElement;
+	private Button prevElementButton;
+	private Button nextElementButton;
+	private ScrolledComposite scrolledCanvas;
 	
 	private ArrayList<String[]> historyStack;
 	private ArrayList<Integer> historyCaret;
@@ -400,9 +406,14 @@ public class EditorWindow {
 		
 		canvas.addListener(SWT.MouseUp, new Listener(){
 	        public void handleEvent(Event e){
-	        	String text = (e.x) + "," + (e.y);
-	        	textCoords.setText(text);
-	        	copyToClipboard(text);
+	        	String coordText = (e.x) + "," + (e.y);
+	        	textCoords.setText(coordText);
+	        	copyToClipboard(coordText);
+	        	
+	        	// Detectar si hizo click en algún elemento
+	        	if (drawElements || drawAnimations) {
+	        		detectClickedElement(e.x, e.y);
+	        	}
 	        }
 	    });
 		
@@ -470,6 +481,7 @@ public class EditorWindow {
 		
 		GridData gridData = new GridData(GridData.FILL_BOTH);
 		sc.setLayoutData(gridData);
+		scrolledCanvas = sc;
 		
 		gridData = new GridData(GridData.FILL_BOTH);
 		gridData.minimumWidth = 500;
@@ -736,6 +748,42 @@ public class EditorWindow {
 		textCoords.setFont(new Font(display, new FontData("Courier New", 10, SWT.NORMAL)));
 		textCoords.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		
+		Label infoLabel = new Label(coordsComposite, SWT.NONE);
+		infoLabel.setText("Element Info:");
+		
+		elementInfo = new StyledText(coordsComposite, SWT.BORDER | SWT.READ_ONLY);
+		elementInfo.setFont(new Font(display, new FontData("Courier New", 9, SWT.NORMAL)));
+		elementInfo.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+		elementInfo.setText("Click on an element to see its information");
+		
+		Composite navComposite = new Composite(coordsComposite, SWT.NONE);
+		GridLayout navLayout = new GridLayout();
+		navLayout.numColumns = 2;
+		navComposite.setLayout(navLayout);
+		GridData navData = new GridData(GridData.FILL_HORIZONTAL);
+		navData.horizontalSpan = 2;
+		navComposite.setLayoutData(navData);
+		
+		prevElementButton = new Button(navComposite, SWT.NONE);
+		prevElementButton.setText("< Previous Element");
+		prevElementButton.setEnabled(false);
+		prevElementButton.addSelectionListener(new SelectionAdapter() {
+		    @Override
+		    public void widgetSelected(SelectionEvent event) {
+		        previousElement();
+		    }
+		});
+		
+		nextElementButton = new Button(navComposite, SWT.NONE);
+		nextElementButton.setText("Next Element >");
+		nextElementButton.setEnabled(false);
+		nextElementButton.addSelectionListener(new SelectionAdapter() {
+		    @Override
+		    public void widgetSelected(SelectionEvent event) {
+		        nextElement();
+		    }
+		});
+		
 	    Button buttonUpdate = new Button(contentComposite, SWT.NONE);
 	    buttonUpdate.setText("Write Current Section To File");
 	    buttonUpdate.addSelectionListener(new SelectionAdapter() {
@@ -765,6 +813,10 @@ public class EditorWindow {
 
 	public void setConsoleText(String text) {
 		textConsole.setText(text);
+	}
+
+	public void setElementInfo(String info) {
+		elementInfo.setText(info);
 	}
 
 	private void writeElementsToDvd() {
@@ -964,6 +1016,251 @@ public class EditorWindow {
 		}
 		if (redoButton != null) {
 			redoButton.setEnabled(historyIndex < historyStack.size() - 1);
+		}
+	}
+
+	private void detectClickedElement(int clickX, int clickY) {
+		List<desperados.dvd.elements.Element> elements = FileService.getElements();
+		if (elements == null || elements.isEmpty()) {
+			return;
+		}
+		
+		// Rango de detección (radio del círculo es 12, así que 24 total)
+		int clickRadius = 15;
+		
+		for (desperados.dvd.elements.Element elem : elements) {
+			int elemX = elem.getX();
+			int elemY = elem.getY();
+			
+			// Calcular distancia euclidiana
+			int dx = elemX - clickX;
+			int dy = elemY - clickY;
+			int distance = (int) Math.sqrt(dx * dx + dy * dy);
+			
+			if (distance <= clickRadius) {
+				// Elemento encontrado
+				currentElement = elem;
+				selectedElement = elem;
+				FileService.setSelectedElement(elem);
+				displayElementInfo(elem);
+				updateNavigationButtons();
+				navigateToElement(elem);
+				canvas.redraw();
+				return;
+			}
+		}
+		
+		// No se encontró elemento
+		currentElement = null;
+		selectedElement = null;
+		FileService.setSelectedElement(null);
+		setElementInfo("No element at this location");
+		updateNavigationButtons();
+		canvas.redraw();
+		canvas.redraw();
+	}
+
+	private void displayElementInfo(desperados.dvd.elements.Element elem) {
+		StringBuilder info = new StringBuilder();
+		info.append("ID: ").append(elem.getIdentifier()).append("\n");
+		info.append("X: ").append(elem.getX()).append("\n");
+		info.append("Y: ").append(elem.getY()).append("\n");
+		info.append("Sprite: ").append(elem.getSprite()).append("\n");
+		
+		if (elem instanceof desperados.dvd.elements.Alive) {
+			desperados.dvd.elements.Alive alive = (desperados.dvd.elements.Alive) elem;
+			info.append("Direction: ").append(alive.getDirection()).append("\n");
+		}
+		
+		setElementInfo(info.toString());
+	}
+
+	private void navigateToElement(desperados.dvd.elements.Element elem) {
+		// Asegurarse de que estamos en la sección de ELEM
+		if (activeComboItem != ScriptItems.ELEM.ordinal()) {
+			combo.select(ScriptItems.ELEM.ordinal());
+			combo.notifyListeners(SWT.Selection, new Event());
+		}
+		
+		// Desplazar el mapa para centrar el elemento
+		if (scrolledCanvas != null) {
+			int elemX = elem.getX();
+			int elemY = elem.getY();
+			
+			// Obtener el tamaño visible del canvas
+			org.eclipse.swt.graphics.Rectangle clientArea = scrolledCanvas.getClientArea();
+			int visibleWidth = clientArea.width;
+			int visibleHeight = clientArea.height;
+			
+			// Calcular el origen para centrar el elemento
+			int originX = Math.max(0, elemX - visibleWidth / 2);
+			int originY = Math.max(0, elemY - visibleHeight / 2);
+			
+			// Asegurarse de no desplazarse más allá del límite
+			originX = Math.min(originX, imageWidth - visibleWidth);
+			originY = Math.min(originY, imageHeight - visibleHeight);
+			
+			scrolledCanvas.setOrigin(originX, originY);
+		}
+		
+		// Buscar el identificador en el JSON y seleccionarlo
+		String identifier = elem.getIdentifier();
+		String jsonContent = text.getText();
+		String searchPattern = "\"" + identifier + "\"";
+		int searchIndex = jsonContent.indexOf(searchPattern);
+		
+		if (searchIndex >= 0) {
+			// Calcular línea y columna
+			int lineNumber = jsonContent.substring(0, searchIndex).split("\n").length - 1;
+			
+			// Ir a esa línea
+			try {
+				// Seleccionar el identificador (sin las comillas)
+				int startSelection = searchIndex + 1; // Después de la comilla inicial
+				int endSelection = startSelection + identifier.length();
+				
+				text.setCaretOffset(startSelection);
+				text.setSelection(startSelection, endSelection);
+				
+				// Scroll para mostrar la línea
+				text.setTopIndex(Math.max(0, lineNumber - 5));
+				text.showSelection();
+			} catch (Exception e) {
+				// Ignorar errores
+			}
+		}
+	}
+
+	private void updateNavigationButtons() {
+		if (currentElement == null) {
+			prevElementButton.setEnabled(false);
+			nextElementButton.setEnabled(false);
+			return;
+		}
+		
+		List<desperados.dvd.elements.Element> elements = FileService.getElements();
+		if (elements == null) {
+			prevElementButton.setEnabled(false);
+			nextElementButton.setEnabled(false);
+			return;
+		}
+		
+		String currentId = currentElement.getIdentifier();
+		int indexUnderscore = currentId.lastIndexOf("_");
+		
+		if (indexUnderscore <= 0) {
+			prevElementButton.setEnabled(false);
+			nextElementButton.setEnabled(false);
+			return;
+		}
+		
+		try {
+			String prefix = currentId.substring(0, indexUnderscore + 1);
+			int currentNum = Integer.parseInt(currentId.substring(indexUnderscore + 1));
+			
+			int prevNum = currentNum - 1;
+			int nextNum = currentNum + 1;
+			
+			String prevId = prefix + prevNum;
+			String nextId = prefix + nextNum;
+			
+			boolean hasPrev = false;
+			boolean hasNext = false;
+			
+			for (desperados.dvd.elements.Element elem : elements) {
+				if (elem.getIdentifier().equals(prevId)) {
+					hasPrev = true;
+				}
+				if (elem.getIdentifier().equals(nextId)) {
+					hasNext = true;
+				}
+			}
+			
+			prevElementButton.setEnabled(hasPrev);
+			nextElementButton.setEnabled(hasNext);
+		} catch (NumberFormatException e) {
+			prevElementButton.setEnabled(false);
+			nextElementButton.setEnabled(false);
+		}
+	}
+
+	private void previousElement() {
+		if (currentElement == null) {
+			return;
+		}
+		
+		List<desperados.dvd.elements.Element> elements = FileService.getElements();
+		if (elements == null) {
+			return;
+		}
+		
+		String currentId = currentElement.getIdentifier();
+		int indexUnderscore = currentId.lastIndexOf("_");
+		
+		if (indexUnderscore <= 0) {
+			return;
+		}
+		
+		try {
+			String prefix = currentId.substring(0, indexUnderscore + 1);
+			int currentNum = Integer.parseInt(currentId.substring(indexUnderscore + 1));
+			int prevNum = currentNum - 1;
+			String prevId = prefix + prevNum;
+			
+			for (desperados.dvd.elements.Element elem : elements) {
+				if (elem.getIdentifier().equals(prevId)) {
+					currentElement = elem;
+					selectedElement = elem;
+					FileService.setSelectedElement(elem);
+					displayElementInfo(elem);
+					updateNavigationButtons();
+					navigateToElement(elem);
+					canvas.redraw();
+					return;
+				}
+			}
+		} catch (NumberFormatException e) {
+			// Ignorar errores
+		}
+	}
+
+	private void nextElement() {
+		if (currentElement == null) {
+			return;
+		}
+		
+		List<desperados.dvd.elements.Element> elements = FileService.getElements();
+		if (elements == null) {
+			return;
+		}
+		
+		String currentId = currentElement.getIdentifier();
+		int indexUnderscore = currentId.lastIndexOf("_");
+		
+		if (indexUnderscore <= 0) {
+			return;
+		}
+		
+		try {
+			String prefix = currentId.substring(0, indexUnderscore + 1);
+			int currentNum = Integer.parseInt(currentId.substring(indexUnderscore + 1));
+			int nextNum = currentNum + 1;
+			String nextId = prefix + nextNum;
+			
+			for (desperados.dvd.elements.Element elem : elements) {
+				if (elem.getIdentifier().equals(nextId)) {
+					currentElement = elem;
+					selectedElement = elem;
+					FileService.setSelectedElement(elem);
+					displayElementInfo(elem);
+					updateNavigationButtons();
+					navigateToElement(elem);
+					canvas.redraw();
+					return;
+				}
+			}
+		} catch (NumberFormatException e) {
+			// Ignorar errores
 		}
 	}
 }

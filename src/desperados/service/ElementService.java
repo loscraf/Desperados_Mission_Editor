@@ -58,6 +58,8 @@ public class ElementService {
 		e.gc.setFont(font);
 		e.gc.setBackground(display.getSystemColor(SWT.COLOR_RED));
 		
+		desperados.dvd.elements.Element selectedElement = FileService.getSelectedElement();
+		
 		for (int i = 0; i < elements.size(); i++) {
 			Element elem = elements.get(i);
 			
@@ -76,6 +78,27 @@ public class ElementService {
 				
 				
 				// draw identifier
+				e.gc.setForeground(display.getSystemColor(SWT.COLOR_YELLOW));
+				
+				// Si es el elemento seleccionado, dibujar fondo negro
+				if (selectedElement != null && selectedElement.getIdentifier().equals(elem.getIdentifier())) {
+					String identifier = elem.getIdentifier();
+					org.eclipse.swt.graphics.Point textExtent = e.gc.textExtent(identifier);
+					
+					// Dibujar fondo negro con padding
+					int bgX = elem.getX() + 15 - 2;
+					int bgY = elem.getY() - 15 - 2;
+					int bgWidth = textExtent.x + 4;
+					int bgHeight = textExtent.y + 4;
+					
+					e.gc.setBackground(display.getSystemColor(SWT.COLOR_BLACK));
+					e.gc.fillRectangle(bgX, bgY, bgWidth, bgHeight);
+					
+					// Dibujar borde blanco
+					e.gc.setForeground(display.getSystemColor(SWT.COLOR_WHITE));
+					e.gc.drawRectangle(bgX, bgY, bgWidth, bgHeight);
+				}
+				
 				e.gc.setForeground(display.getSystemColor(SWT.COLOR_YELLOW));
 				e.gc.drawText(elem.getIdentifier(), elem.getX() + 15, elem.getY() - 15, SWT.DRAW_TRANSPARENT);
 			}

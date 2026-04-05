@@ -68,6 +68,7 @@ public class FileService {
 	private static MaterialService materialService;
 	private static CoordinateService coordinateService;
 	private static AnimationService animationService;
+	private static desperados.dvd.elements.Element selectedElement;
 	
 	private static ScbReader scbReader;
 	
@@ -342,5 +343,20 @@ public class FileService {
 
 	public static short lookupRouteByIdentifier(String identifier) throws IdentifierNotFoundException {
 		return DvdContainer.lookupRouteByIdentifier(identifier);
+	}
+
+	public static List<desperados.dvd.elements.Element> getElements() {
+		if (elementService != null) {
+			return elementService.getElements();
+		}
+		return null;
+	}
+
+	public static void setSelectedElement(desperados.dvd.elements.Element element) {
+		selectedElement = element;
+	}
+
+	public static desperados.dvd.elements.Element getSelectedElement() {
+		return selectedElement;
 	}
 }
