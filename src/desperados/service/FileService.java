@@ -15,6 +15,8 @@ import desperados.MainGUI;
 import desperados.dvd.DvdContainer;
 import desperados.dvd.DvdReader;
 import desperados.dvd.elements.Element;
+import desperados.dvd.elements.Accessory;
+import desperados.dvd.elements.Alive;
 import desperados.dvd.locations.Location;
 import desperados.dvd.waypoints.WaypointRoute;
 import desperados.exception.DvdReadException;
@@ -23,6 +25,12 @@ import desperados.exception.IndexNotFoundException;
 import desperados.exception.JsonParseException;
 import desperados.exception.ServiceException;
 import desperados.scb.ScbReader;
+import desperados.dvf.DvfAnimation;
+import desperados.dvf.DvfFrame;
+import desperados.dvf.DvfFrameset;
+import desperados.dvf.DvfHeader;
+import desperados.dvf.DvfObject;
+import desperados.dvf.DvfReader;
 import desperados.util.BuildingsTextWriter;
 import desperados.util.ElementsDvdWriter;
 import desperados.util.ElementsJsonReader;
@@ -358,5 +366,67 @@ public class FileService {
 
 	public static desperados.dvd.elements.Element getSelectedElement() {
 		return selectedElement;
+	}
+
+	public static org.eclipse.swt.graphics.Image getElementSpriteImage(desperados.dvd.elements.Element elem) {
+		try {
+			// Usar AnimationService para obtener el sprite
+			DvfReader dvfReader = new DvfReader();
+			DvfHeader header;
+			
+			if (elem instanceof desperados.dvd.elements.Accessory) {
+				header = dvfReader.loadAccessory(elem);
+			} else {
+				header = dvfReader.loadCharacter(elem);
+			}
+			
+			if (header == null) {
+				return null;
+			}
+			
+			DvfObject obj = header.getObject(elem.getSprite());
+			if (obj == null) {
+				return null;
+			}
+			
+			// Obtener la animación base (stance 0 para personajes)
+			DvfAnimation dvfAnimation = obj.getAnimation(0);
+			if (dvfAnimation == null) {
+				return null;
+			}
+			
+			// Obtener dirección
+			int direction = 0;
+			if (elem instanceof desperados.dvd.elements.Alive) {
+				direction = ((desperados.dvd.elements.Alive) elem).getDirection();
+			} else if (elem instanceof desperados.dvd.elements.Accessory) {
+				direction = ((desperados.dvd.elements.Accessory) elem).getDirection();
+			}
+			
+			// Obtener frameset para esa dirección
+			DvfFrameset frameset = dvfAnimation.getFrameset(direction);
+			if (frameset == null || frameset.getNumFrames() <= 0) {
+				return null;
+			}
+			
+			// Obtener primer frame
+			DvfFrame frame = frameset.getFrame(0);
+			if (frame == null) {
+				return null;
+			}
+			
+			// Convertir ImageData a Image
+			org.eclipse.swt.graphics.ImageData imageData = frame.getSprite();
+			if (imageData == null) {
+				return null;
+			}
+			
+			org.eclipse.swt.widgets.Display display = org.eclipse.swt.widgets.Display.getDefault();
+			return new org.eclipse.swt.graphics.Image(display, imageData);
+			
+		} catch (Exception e) {
+			// Ignorar errores
+			return null;
+		}
 	}
 }

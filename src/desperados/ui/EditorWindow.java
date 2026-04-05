@@ -47,7 +47,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v0.84";
+	private final static String appVersion = "v1.1";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -105,6 +105,7 @@ public class EditorWindow {
 	private StyledText textConsole;
 	private StyledText textCoords;
 	private StyledText elementInfo;
+	private Label spriteLabel;
 	private Text searchText;
 	private String[] originalComboTexts;
 	private Combo combo;
@@ -374,11 +375,16 @@ public class EditorWindow {
 		
 		clipboard = new Clipboard(display);
 		
-		GridLayout gridLayout = new GridLayout();
-		gridLayout.numColumns = 2;
-		shell.setLayout(gridLayout);
+		// Layout para el shell con el SashForm
+		GridLayout shellLayout = new GridLayout();
+		shellLayout.numColumns = 1;
+		shell.setLayout(shellLayout);
 		
-		ScrolledComposite sc = new ScrolledComposite(shell, SWT.H_SCROLL | SWT.V_SCROLL);
+		// Usar SashForm en lugar de GridLayout para permitir redimensionamiento
+		SashForm mainSash = new SashForm(shell, SWT.HORIZONTAL);
+		mainSash.setLayoutData(new GridData(GridData.FILL_BOTH));
+		
+		ScrolledComposite sc = new ScrolledComposite(mainSash, SWT.H_SCROLL | SWT.V_SCROLL);
 		
 		Thread updateThread = new Thread() {
 	        public void run() {
@@ -475,17 +481,13 @@ public class EditorWindow {
 		sc.setMinSize(imageWidth, imageHeight);
 		sc.setExpandHorizontal(true);
 		sc.setExpandVertical(true);
-		
-		Composite contentComposite = new Composite(shell, SWT.BORDER);
-		contentComposite.setLayout(new GridLayout());
-		
-		GridData gridData = new GridData(GridData.FILL_BOTH);
-		sc.setLayoutData(gridData);
 		scrolledCanvas = sc;
 		
-		gridData = new GridData(GridData.FILL_BOTH);
-		gridData.minimumWidth = 500;
-		contentComposite.setLayoutData(gridData);
+		Composite contentComposite = new Composite(mainSash, SWT.BORDER);
+		contentComposite.setLayout(new GridLayout());
+		
+		// Establecer proporciones iniciales para el SashForm (60% mapa, 40% panel derecho)
+		mainSash.setWeights(new int[] { 60, 40 });
 		
 		Composite undoRedoComposite = new Composite(contentComposite, SWT.NONE);
 		GridLayout undoRedoLayout = new GridLayout();
@@ -495,7 +497,7 @@ public class EditorWindow {
 		undoRedoComposite.setLayoutData(undoRedoData);
 		
 		undoButton = new Button(undoRedoComposite, SWT.NONE);
-		undoButton.setText("Deshacer (Ctrl+Z)");
+		undoButton.setText("Undo (Ctrl+Z)");
 		undoButton.setEnabled(false);
 		undoButton.addSelectionListener(new SelectionAdapter() {
 	        @Override
@@ -505,7 +507,7 @@ public class EditorWindow {
 	    });
 		
 		redoButton = new Button(undoRedoComposite, SWT.NONE);
-		redoButton.setText("Rehacer (Ctrl+Y)");
+		redoButton.setText("Redo (Ctrl+Y)");
 		redoButton.setEnabled(false);
 		redoButton.addSelectionListener(new SelectionAdapter() {
 	        @Override
@@ -514,7 +516,16 @@ public class EditorWindow {
 	        }
 	    });
 		
-		Button checkBoxElements = new Button(contentComposite, SWT.CHECK);
+	    // Crear composite para agrupar checkboxes horizontalmente
+	    Composite checkBoxComposite1 = new Composite(contentComposite, SWT.NONE);
+	    GridLayout checkLayout1 = new GridLayout();
+	    checkLayout1.numColumns = 4;
+	    checkLayout1.marginHeight = 0;
+	    checkLayout1.marginWidth = 0;
+	    checkBoxComposite1.setLayout(checkLayout1);
+	    checkBoxComposite1.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+	    
+		Button checkBoxElements = new Button(checkBoxComposite1, SWT.CHECK);
 		checkBoxElements.setText("Draw Elements");
 		checkBoxElements.setSelection(drawElements);
 		checkBoxElements.addSelectionListener(new SelectionAdapter() {
@@ -526,7 +537,7 @@ public class EditorWindow {
 	        }
 	    });
 		
-	    Button checkBoxAnimations = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxAnimations = new Button(checkBoxComposite1, SWT.CHECK);
 	    checkBoxAnimations.setText("Draw Animations");
 	    checkBoxAnimations.setSelection(drawAnimations);
 	    checkBoxAnimations.addSelectionListener(new SelectionAdapter() {
@@ -538,7 +549,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxIdentifier = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxIdentifier = new Button(checkBoxComposite1, SWT.CHECK);
 	    checkBoxIdentifier.setText("Draw Identifier");
 	    checkBoxIdentifier.setSelection(drawIdentifier);
 	    checkBoxIdentifier.addSelectionListener(new SelectionAdapter() {
@@ -550,7 +561,28 @@ public class EditorWindow {
 	        }
 	    });
 	    
-		Button checkBoxObstacles = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxCoords = new Button(checkBoxComposite1, SWT.CHECK);
+	    checkBoxCoords.setText("Draw Coordinates");
+	    checkBoxCoords.setSelection(drawCoords);
+	    checkBoxCoords.addSelectionListener(new SelectionAdapter() {
+	        @Override
+	        public void widgetSelected(SelectionEvent event) {
+	            Button btn = (Button) event.getSource();
+	            drawCoords = btn.getSelection();
+	            canvas.redraw();
+	        }
+	    });
+	    
+	    // Segunda fila de checkboxes
+	    Composite checkBoxComposite2 = new Composite(contentComposite, SWT.NONE);
+	    GridLayout checkLayout2 = new GridLayout();
+	    checkLayout2.numColumns = 4;
+	    checkLayout2.marginHeight = 0;
+	    checkLayout2.marginWidth = 0;
+	    checkBoxComposite2.setLayout(checkLayout2);
+	    checkBoxComposite2.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+	    
+		Button checkBoxObstacles = new Button(checkBoxComposite2, SWT.CHECK);
 		checkBoxObstacles.setText("Draw Obstacles");
 		checkBoxObstacles.setSelection(drawObstacles);
 	    checkBoxObstacles.addSelectionListener(new SelectionAdapter() {
@@ -562,7 +594,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxWaypoints = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxWaypoints = new Button(checkBoxComposite2, SWT.CHECK);
 	    checkBoxWaypoints.setText("Draw Waypoints");
 	    checkBoxWaypoints.setSelection(drawWaypoints);
 	    checkBoxWaypoints.addSelectionListener(new SelectionAdapter() {
@@ -574,7 +606,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxAI = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxAI = new Button(checkBoxComposite2, SWT.CHECK);
 	    checkBoxAI.setText("Draw AI Zones");
 	    checkBoxAI.setSelection(drawWaypoints);
 	    checkBoxAI.addSelectionListener(new SelectionAdapter() {
@@ -586,7 +618,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxLocations = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxLocations = new Button(checkBoxComposite2, SWT.CHECK);
 	    checkBoxLocations.setText("Draw Locations");
 	    checkBoxLocations.setSelection(drawLocations);
 	    checkBoxLocations.addSelectionListener(new SelectionAdapter() {
@@ -598,7 +630,16 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxDoors = new Button(contentComposite, SWT.CHECK);
+	    // Tercera fila de checkboxes
+	    Composite checkBoxComposite3 = new Composite(contentComposite, SWT.NONE);
+	    GridLayout checkLayout3 = new GridLayout();
+	    checkLayout3.numColumns = 2;
+	    checkLayout3.marginHeight = 0;
+	    checkLayout3.marginWidth = 0;
+	    checkBoxComposite3.setLayout(checkLayout3);
+	    checkBoxComposite3.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+	    
+	    Button checkBoxDoors = new Button(checkBoxComposite3, SWT.CHECK);
 	    checkBoxDoors.setText("Draw Doors");
 	    checkBoxDoors.setSelection(drawDoors);
 	    checkBoxDoors.addSelectionListener(new SelectionAdapter() {
@@ -610,7 +651,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
-	    Button checkBoxMaterials = new Button(contentComposite, SWT.CHECK);
+	    Button checkBoxMaterials = new Button(checkBoxComposite3, SWT.CHECK);
 	    checkBoxMaterials.setText("Draw Materials");
 	    checkBoxMaterials.setSelection(drawMaterials);
 	    checkBoxMaterials.addSelectionListener(new SelectionAdapter() {
@@ -618,18 +659,6 @@ public class EditorWindow {
 	        public void widgetSelected(SelectionEvent event) {
 	            Button btn = (Button) event.getSource();
 	            drawMaterials = btn.getSelection();
-	            canvas.redraw();
-	        }
-	    });
-	    
-	    Button checkBoxCoords = new Button(contentComposite, SWT.CHECK);
-	    checkBoxCoords.setText("Draw Coordinates");
-	    checkBoxCoords.setSelection(drawCoords);
-	    checkBoxCoords.addSelectionListener(new SelectionAdapter() {
-	        @Override
-	        public void widgetSelected(SelectionEvent event) {
-	            Button btn = (Button) event.getSource();
-	            drawCoords = btn.getSelection();
 	            canvas.redraw();
 	        }
 	    });
@@ -756,6 +785,13 @@ public class EditorWindow {
 		elementInfo.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		elementInfo.setText("Click on an element to see its information");
 		
+		spriteLabel = new Label(coordsComposite, SWT.CENTER | SWT.BORDER);
+		GridData spriteLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		spriteLabelData.heightHint = 64;
+		spriteLabelData.horizontalSpan = 2;
+		spriteLabel.setLayoutData(spriteLabelData);
+		spriteLabel.setText("Sprite Preview");
+		
 		Composite navComposite = new Composite(coordsComposite, SWT.NONE);
 		GridLayout navLayout = new GridLayout();
 		navLayout.numColumns = 2;
@@ -804,6 +840,10 @@ public class EditorWindow {
 	        	}
 	        }
 	    });
+	    
+	    // Establecer tamaño y posición del shell
+	    shell.setSize(1400, 900);
+	    shell.setLocation(100, 100);
 	}
 
 	private void copyToClipboard(String string) {
@@ -1073,6 +1113,7 @@ public class EditorWindow {
 		}
 		
 		setElementInfo(info.toString());
+		updateSpritePreview(elem);
 	}
 
 	private void navigateToElement(desperados.dvd.elements.Element elem) {
@@ -1261,6 +1302,19 @@ public class EditorWindow {
 			}
 		} catch (NumberFormatException e) {
 			// Ignorar errores
+		}
+	}
+
+	private void updateSpritePreview(desperados.dvd.elements.Element elem) {
+		// Obtener la imagen del sprite del elemento
+		org.eclipse.swt.graphics.Image spriteImage = FileService.getElementSpriteImage(elem);
+		
+		if (spriteImage != null) {
+			spriteLabel.setImage(spriteImage);
+			spriteLabel.setText("");
+		} else {
+			spriteLabel.setImage(null);
+			spriteLabel.setText("No sprite preview available");
 		}
 	}
 }
