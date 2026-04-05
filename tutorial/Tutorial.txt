@@ -1,0 +1,86 @@
+English
+This tutorial is for correctly compiling the project, then assembling the artifact and being able to generate the editor's .jar file.
+
+1- Install "OpenJDK8U-jdk_x64_win_8u482b08.exe", this is java dk (development kit) v8, for old projects like this.
+
+2- Install and open the IntelliJ IDEA 2026 program (it may work with another program, I use this one).
+
+3. Drag or open the "DesperadosMissionEditor" folder (the folder containing this tutorial) into IntelliJ.
+
+4. Verify that the "scr" folder is marked as "sources root" (blue). Hover your mouse over it, and it will tell you. If nothing appears, we need to specify it. Right-click, select "Mark Directory As," and then "Sources root." If the option doesn't appear, try a different directory and see if it appears again.
+
+5. Click on the IntelliJ main menu (three horizontal lines in the upper left corner of the screen) and then "Project Structure."
+
+6. In the Project tab:
+
+      Name: Anything you want, but try not to leave any spaces.
+
+      SDK: temurin-1.8 (Eclipse Temurin 1.8.0_482). If it doesn't appear, download the JDK, version 1.8, vendor temurin-1.8, and download it.
+
+      Language level: 8 - Lambdas, type annotations, etc.
+
+   In the Modules tab:
+
+      Module SDK: temurin-1.8. If it doesn't appear, do the same as you did in the previous tab.
+
+      In the container, it should show the module name and below it the same libraries that are in the project's "lib" folder. If they are not all there, you must add them one by one using the + button, Library, Java.
+
+   In the Artifacts tab:
+
+      Click the + button, JAR, From modules with dependencies. In Main Class, choose the MainGUI class, which is the one that contains the app's runtime, OK, Apply, OK.
+
+7- Click on the IntelliJ main menu, Build, Build Project. In the notifications, check that it was done correctly.
+
+   Now, click Build, Build Artifacts, select the JAR file that appears, and click Build. The .jar file will be created in the path: classes, artifacts, jarname, .jar. This is the default if you haven't changed the directory in project structure, project.
+
+8- To properly open the generated .jar file, we need to go to the generated file on the disk and open it with WinZip, WinRAR, 7-Zip, etc. Go to the META-INF folder and delete all files with the SF, RSA, and DSA extensions. This is to remove the signatures that protect the file.
+
+
+
+
+
+
+
+Note: The JAR file "org.eclipse.swt.win32.win32.x86_64_3.105.0.v20160603-0902" is included in case there are any incompatibilities when compiling the project. You may not need to use it.
+
+----------------------
+
+Spanish
+
+Este tutorial es para compilar correctamente el proyecto, luego armar el artefacto y poder generar el .jar del editor
+
+1- Instalar "OpenJDK8U-jdk_x64_win_8u482b08.exe", esto es java dk (development kit, kit para desarrolladores), para proyectos viejos como este.
+
+2- Instalar y abrir el programa intelliJ IDEA 2026 (tal vez ande con otro programa, yo uso este).
+
+3- Arrastra o abre la carpeta "DesperadosMissionEditor" (la carpeta que contiene este tutorial) al intelliJ.
+
+4- Verificar que la carpeta "scr", esté marcada como "sources root" (color azul), deja el mouse encima y te dirá. Si no muestra nada, debemos indicarle. Click derecho, Mark Directory As, Sources root. Si no aparece la opción, colocar otra y volver a ver si aparece.
+
+5- Click en el menú principal del intelliJ (3 rayas horizontales arriba a la izquierda de la pantalla) y project structure.
+
+6- En la pestaña Project:
+
+      Name: lo que quieras, pero trata de no dejar espacio
+      SDK: temurin-1.8 (Eclipse Temurin 1.8.0_482). Si no te aparece, download JDK, versión 1.8, vendor temurin-1.8, download.
+      Language level: 8 - Lambdas, type annotations,etc.
+   
+   En la Pestaña Modules:
+   
+      Module SDK: temurin-1.8. Si no aparece, haz lo mismo que hciiste en la pestaña anterior
+	  
+	  En el contenedor, debe mostrarte el nombre del módulo y debajo las mismas librerías que están en la carpeta "lib" del proyecto. Si no están todas, debes agregarlas una por una con el +, Library, Java.
+
+   En la pestaña Artifacts:
+   
+      Presiona el +, JAR, From modules with dependencies. En Main Class, elegir la clase MainGUI, que es la que tieen el run de la app, ok, apply, ok.
+
+7- Click en el menú principal del intelliJ, Build, Build Project. En notificaciones, revisar que se haya hecho correctamente.
+   Ahora, Build, Build Artifacts, seleccionamos el jar que aparece, build. El archivo .jar se creará en la ruta: classes, artifacts, nombredeljar, .jar. Esto es por defecto sino cambiaste el directorio en project structure, project.
+
+8- Para abrir correctamente el .jar generado, necesitamos ir al archivo generado en el disco y abrirlo con winzip, win rar, 7zip, etc. Ir a la carpeta META-INF y eliminar todos los archivos con las extensiones SF, RSA y DSA. Esto es para eliminar las firmas que protegen al archivo.
+
+
+
+Nota: El archivo JAR "org.eclipse.swt.win32.win32.x86_64_3.105.0.v20160603-0902" está incluido en caso de que haya alguna incompatibilidad al compilar el proyecto. Quizás no haga falta usarlo.
+
