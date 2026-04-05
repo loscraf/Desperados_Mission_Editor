@@ -98,6 +98,8 @@ public class EditorWindow {
 	private StyledText text;
 	private StyledText textConsole;
 	private StyledText textCoords;
+	private Text searchText;
+	private String[] originalComboTexts;
 	private Combo combo;
 	
 	private int activeComboItem;
@@ -118,8 +120,10 @@ public class EditorWindow {
 		};
 		
 		comboTexts = new String[comboItems.length];
+		originalComboTexts = new String[comboItems.length];
 		for (int i = 0; i < comboTexts.length; i++) {
 			comboTexts[i] = "TODO";
+			originalComboTexts[i] = "TODO";
 		}
 		
 		textPositions = new int[comboItems.length];
@@ -156,6 +160,7 @@ public class EditorWindow {
 		loadBuildingsText();
 		
 		comboTexts[ScriptItems.COORDS.ordinal()] = "Insert coordinates (x,y) here.";
+		originalComboTexts[ScriptItems.COORDS.ordinal()] = "Insert coordinates (x,y) here.";
 		
 		dvdLoaded = true;
 		
@@ -164,19 +169,27 @@ public class EditorWindow {
 	}
 
 	private void loadElementText() {
-		comboTexts[ScriptItems.ELEM.ordinal()] = FileService.getElementText();
+		String text = FileService.getElementText();
+		comboTexts[ScriptItems.ELEM.ordinal()] = text;
+		originalComboTexts[ScriptItems.ELEM.ordinal()] = text;
 	}
 
 	private void loadScriptText() {
-		comboTexts[ScriptItems.SCB.ordinal()] = FileService.readScbFile();
+		String text = FileService.readScbFile();
+		comboTexts[ScriptItems.SCB.ordinal()] = text;
+		originalComboTexts[ScriptItems.SCB.ordinal()] = text;
 	}
 
 	private void loadLocationsText() {
-		comboTexts[ScriptItems.SCRP.ordinal()] = FileService.getLocationText();
+		String text = FileService.getLocationText();
+		comboTexts[ScriptItems.SCRP.ordinal()] = text;
+		originalComboTexts[ScriptItems.SCRP.ordinal()] = text;
 	}
 
 	private void loadBuildingsText() {
-		comboTexts[ScriptItems.BUIL.ordinal()] = FileService.getBuildingsText();
+		String text = FileService.getBuildingsText();
+		comboTexts[ScriptItems.BUIL.ordinal()] = text;
+		originalComboTexts[ScriptItems.BUIL.ordinal()] = text;
 	}
 
 	private void loadWaypointText() {
@@ -187,6 +200,7 @@ public class EditorWindow {
 				str += r.toString() + "\n";
 			}
 			comboTexts[ScriptItems.WAYS.ordinal()] = str;
+			originalComboTexts[ScriptItems.WAYS.ordinal()] = str;
 		}
 	}
 
@@ -564,6 +578,19 @@ public class EditorWindow {
 	        }
 	    });
 	    
+	    Label searchLabel = new Label(contentComposite, SWT.NONE);
+	    searchLabel.setText("Search:");
+	    
+	    searchText = new Text(contentComposite, SWT.BORDER);
+	    searchText.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+	    searchText.addModifyListener(new ModifyListener() {
+	        @Override
+	        public void modifyText(ModifyEvent e) {
+	            String searchTerm = searchText.getText().toLowerCase();
+	            applySearchFilter(searchTerm);
+	        }
+	    });
+	    
 	    combo = new Combo(contentComposite, SWT.DROP_DOWN | SWT.READ_ONLY);
 	    combo.setItems(comboItems);
 	    combo.select(0);
@@ -581,6 +608,7 @@ public class EditorWindow {
 					textPositions[activeComboItem] = text.getTopIndex();
 					setConsoleText("");
 					activeComboItem = selectionIndex;
+					searchText.setText("");
 					text.setText(comboTexts[selectionIndex]);
 					text.setTopIndex(textPositions[selectionIndex]);
 				}
@@ -727,5 +755,31 @@ public class EditorWindow {
 		}
 		
 		setConsoleText("Writing mission script to SCB completed!");
+	}
+
+	private void applySearchFilter(String searchTerm) {
+		if (searchTerm.isEmpty()) {
+			text.setText(originalComboTexts[activeComboItem]);
+			comboTexts[activeComboItem] = originalComboTexts[activeComboItem];
+			return;
+		}
+		
+		String original = originalComboTexts[activeComboItem];
+		String[] lines = original.split("\n");
+		StringBuilder filtered = new StringBuilder();
+		
+		for (String line : lines) {
+			if (line.toLowerCase().contains(searchTerm)) {
+				filtered.append(line).append("\n");
+			}
+		}
+		
+		String result = filtered.toString();
+		if (result.endsWith("\n")) {
+			result = result.substring(0, result.length() - 1);
+		}
+		
+		text.setText(result);
+		comboTexts[activeComboItem] = result;
 	}
 }
