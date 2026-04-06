@@ -106,6 +106,8 @@ public class EditorWindow {
 	private Text textElementY;
 	private Text textElementSprite;
 	private Text textElementDirection;
+	private Text textElementDvf;
+	private Text textElementCharacter;
 	
 	private StyledText text;
 	private StyledText textConsole;
@@ -328,7 +330,7 @@ public class EditorWindow {
 		});
 		
 		Label lbl = new Label(shell, SWT.NONE);
-		lbl.setText("Enter level number and press enter:");
+		lbl.setText("Drag and drop a .dvd file or Enter level number and press enter:");
 		
 		Text text = new Text(shell, SWT.BORDER);
 		text.setFocus();
@@ -790,7 +792,7 @@ public class EditorWindow {
 		// Grid para organizar los campos de elemento info
 		Composite elementInfoGrid = new Composite(coordsComposite, SWT.NONE);
 		GridLayout infoGridLayout = new GridLayout();
-		infoGridLayout.numColumns = 4;
+		infoGridLayout.numColumns = 8;
 		infoGridLayout.marginHeight = 2;
 		infoGridLayout.marginWidth = 0;
 		elementInfoGrid.setLayout(infoGridLayout);
@@ -798,32 +800,15 @@ public class EditorWindow {
 		elementInfoGridData.horizontalSpan = 2;
 		elementInfoGrid.setLayoutData(elementInfoGridData);
 		
-		// ID
+		// Fila 1: identifier, x, y, direction
 		Label labelId = new Label(elementInfoGrid, SWT.NONE);
-		labelId.setText("ID:");
+		labelId.setText("identifier:");
 		textElementId = new Text(elementInfoGrid, SWT.BORDER);
-		textElementId.setLayoutData(new GridData(100, SWT.DEFAULT));
+		textElementId.setLayoutData(new GridData(80, SWT.DEFAULT));
 		textElementId.setEditable(false);
 		
-		// Sprite
-		Label labelSprite = new Label(elementInfoGrid, SWT.NONE);
-		labelSprite.setText("Sprite:");
-		textElementSprite = new Text(elementInfoGrid, SWT.BORDER);
-		GridData spriteLabelData = new GridData(GridData.FILL_HORIZONTAL);
-		textElementSprite.setLayoutData(spriteLabelData);
-		textElementSprite.addModifyListener(new ModifyListener() {
-			@Override
-			public void modifyText(ModifyEvent e) {
-				if (currentElement != null && !isRestoringElementInfo) {
-					currentElement.setSprite(textElementSprite.getText());
-					regenerateJSON();
-				}
-			}
-		});
-		
-		// X
 		Label labelX = new Label(elementInfoGrid, SWT.NONE);
-		labelX.setText("X:");
+		labelX.setText("x:");
 		textElementX = new Text(elementInfoGrid, SWT.BORDER);
 		textElementX.setLayoutData(new GridData(60, SWT.DEFAULT));
 		textElementX.addModifyListener(new ModifyListener() {
@@ -841,9 +826,8 @@ public class EditorWindow {
 			}
 		});
 		
-		// Y
 		Label labelY = new Label(elementInfoGrid, SWT.NONE);
-		labelY.setText("Y:");
+		labelY.setText("y:");
 		textElementY = new Text(elementInfoGrid, SWT.BORDER);
 		textElementY.setLayoutData(new GridData(60, SWT.DEFAULT));
 		textElementY.addModifyListener(new ModifyListener() {
@@ -861,11 +845,10 @@ public class EditorWindow {
 			}
 		});
 		
-		// Direction
 		Label labelDirection = new Label(elementInfoGrid, SWT.NONE);
-		labelDirection.setText("Dir:");
+		labelDirection.setText("direction:");
 		textElementDirection = new Text(elementInfoGrid, SWT.BORDER);
-		textElementDirection.setLayoutData(new GridData(40, SWT.DEFAULT));
+		textElementDirection.setLayoutData(new GridData(50, SWT.DEFAULT));
 		textElementDirection.addModifyListener(new ModifyListener() {
 			@Override
 			public void modifyText(ModifyEvent e) {
@@ -876,6 +859,70 @@ public class EditorWindow {
 						regenerateJSON();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
+					}
+				}
+			}
+		});
+		
+		// Fila 2: dvf, sprite, character
+		Label labelDvf = new Label(elementInfoGrid, SWT.NONE);
+		labelDvf.setText("dvf:");
+		textElementDvf = new Text(elementInfoGrid, SWT.BORDER);
+		GridData dvfLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		textElementDvf.setLayoutData(dvfLabelData);
+		textElementDvf.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo) {
+					currentElement.setDvf(textElementDvf.getText());
+					regenerateJSON();
+				}
+			}
+		});
+		
+		Label labelSprite = new Label(elementInfoGrid, SWT.NONE);
+		labelSprite.setText("sprite:");
+		textElementSprite = new Text(elementInfoGrid, SWT.BORDER);
+		GridData spriteLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		textElementSprite.setLayoutData(spriteLabelData);
+		textElementSprite.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo) {
+					currentElement.setSprite(textElementSprite.getText());
+					regenerateJSON();
+				}
+			}
+		});
+		
+		Label labelCharacter = new Label(elementInfoGrid, SWT.NONE);
+		labelCharacter.setText("character:");
+		textElementCharacter = new Text(elementInfoGrid, SWT.BORDER);
+		GridData characterLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		textElementCharacter.setLayoutData(characterLabelData);
+		textElementCharacter.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo && currentElement instanceof desperados.dvd.elements.NPC) {
+					desperados.dvd.elements.NPC npc = (desperados.dvd.elements.NPC) currentElement;
+					String charValue = textElementCharacter.getText().trim();
+					try {
+						// Obtener la clase del enum Character dentro de NPC
+						java.lang.Class<?> charClass = Class.forName("desperados.dvd.elements.NPC$Character");
+						// Obtener todos los valores del enum
+						Object[] enumConstants = charClass.getEnumConstants();
+						// Buscar el que coincida con lo que el usuario escribió
+						for (Object enumConstant : enumConstants) {
+							if (enumConstant.toString().equalsIgnoreCase(charValue)) {
+								// Obtener el setter y llamarlo
+								java.lang.reflect.Method setter = npc.getClass().getMethod("setCharacter", charClass);
+								setter.invoke(npc, enumConstant);
+								regenerateJSON();
+								return;
+							}
+						}
+					} catch (Exception ex) {
+						// Ignorar si hay error en la conversión
 					}
 				}
 			}
@@ -1204,10 +1251,12 @@ public class EditorWindow {
 		FileService.setSelectedElement(null);
 		isRestoringElementInfo = true;
 		textElementId.setText("");
+		textElementDvf.setText("");
 		textElementSprite.setText("");
 		textElementX.setText("");
 		textElementY.setText("");
 		textElementDirection.setText("");
+		textElementCharacter.setText("");
 		spriteLabel.setImage(null);
 		spriteLabel.setText("Click on an element to see its information");
 		isRestoringElementInfo = false;
@@ -1220,9 +1269,27 @@ public class EditorWindow {
 		
 		// Llenar los campos de texto con la información del elemento
 		textElementId.setText(elem.getIdentifier());
+		textElementDvf.setText(elem.getDvf());
 		textElementSprite.setText(elem.getSprite());
 		textElementX.setText(String.valueOf(elem.getX()));
 		textElementY.setText(String.valueOf(elem.getY()));
+		
+		// Mostrar el campo character si es NPC
+		if (elem instanceof desperados.dvd.elements.NPC) {
+			desperados.dvd.elements.NPC npc = (desperados.dvd.elements.NPC) elem;
+			try {
+				java.lang.reflect.Method getter = desperados.dvd.elements.NPC.class.getMethod("getCharacter");
+				Object charObj = getter.invoke(npc);
+				textElementCharacter.setText(charObj != null ? charObj.toString() : "");
+				textElementCharacter.setEditable(true);
+			} catch (Exception ex) {
+				textElementCharacter.setText("");
+				textElementCharacter.setEditable(false);
+			}
+		} else {
+			textElementCharacter.setText("");
+			textElementCharacter.setEditable(false);
+		}
 		
 		if (elem instanceof desperados.dvd.elements.Alive) {
 			desperados.dvd.elements.Alive alive = (desperados.dvd.elements.Alive) elem;
