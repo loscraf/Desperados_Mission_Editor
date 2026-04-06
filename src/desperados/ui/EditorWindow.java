@@ -1301,6 +1301,10 @@ public class EditorWindow {
 		}
 		
 		isRestoringElementInfo = false;
+		
+		// Asegurar que el composite padre está layouteado antes de mostrar el sprite
+		spriteLabel.getParent().layout();
+		
 		updateSpritePreview(elem);
 	}
 
@@ -1494,19 +1498,30 @@ public class EditorWindow {
 
 
 	private void updateSpritePreview(desperados.dvd.elements.Element elem) {
-		// Obtener la imagen del sprite del elemento
-		org.eclipse.swt.graphics.Image spriteImage = FileService.getElementSpriteImage(elem);
+		// Limpiar completamente primero
+		spriteLabel.setImage(null);
+		spriteLabel.setText("");
 		
-		if (spriteImage != null) {
-			spriteLabel.setImage(spriteImage);
-			spriteLabel.setText("");
-		} else {
-			spriteLabel.setImage(null);
-			spriteLabel.setText("No sprite preview available");
-		}
-		
-		// Forzar recomposición del layout para que se muestre el sprite correctamente
-		spriteLabel.getParent().layout();
+		// Llamar en el siguiente ciclo del event loop
+		org.eclipse.swt.widgets.Display.getDefault().asyncExec(new Runnable() {
+			@Override
+			public void run() {
+				if (spriteLabel.isDisposed()) {
+					return;
+				}
+				
+				// Obtener la imagen del sprite
+				org.eclipse.swt.graphics.Image spriteImage = FileService.getElementSpriteImage(elem);
+				
+				if (spriteImage != null) {
+					spriteLabel.setImage(spriteImage);
+					spriteLabel.setText("");
+				} else {
+					spriteLabel.setImage(null);
+					spriteLabel.setText("No sprite preview available");
+				}
+			}
+		});
 	}
 
 	private void regenerateJSON() {
@@ -1527,7 +1542,7 @@ public class EditorWindow {
 				// Proteger los listeners de los campos mientras navegamos
 				isRestoringElementInfo = true;
 				
-				// Naveguar al elemento actual para mantenerlo visible
+				// Navegar al elemento actual para mantenerlo visible
 				if (elemToNavigate != null) {
 					navigateToElement(elemToNavigate);
 				}
