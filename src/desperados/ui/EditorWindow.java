@@ -100,17 +100,21 @@ public class EditorWindow {
 	private boolean drawCoords;
 	private boolean drawAnimations;
 	private boolean drawIdentifier;
+	private boolean isRestoringElementInfo;
+	private Text textElementId;
+	private Text textElementX;
+	private Text textElementY;
+	private Text textElementSprite;
+	private Text textElementDirection;
 	
 	private StyledText text;
 	private StyledText textConsole;
 	private StyledText textCoords;
-	private StyledText elementInfo;
 	private Label spriteLabel;
 	private Text searchText;
 	private String[] originalComboTexts;
 	private Combo combo;
 	private desperados.dvd.elements.Element currentElement;
-	private desperados.dvd.elements.Element selectedElement;
 	private Button prevElementButton;
 	private Button nextElementButton;
 	private ScrolledComposite scrolledCanvas;
@@ -779,17 +783,109 @@ public class EditorWindow {
 		
 		Label infoLabel = new Label(coordsComposite, SWT.NONE);
 		infoLabel.setText("Element Info:");
+		GridData infoLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		infoLabelData.horizontalSpan = 2;
+		infoLabel.setLayoutData(infoLabelData);
 		
-		elementInfo = new StyledText(coordsComposite, SWT.BORDER | SWT.READ_ONLY);
-		elementInfo.setFont(new Font(display, new FontData("Courier New", 9, SWT.NORMAL)));
-		elementInfo.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
-		elementInfo.setText("Click on an element to see its information");
+		// Grid para organizar los campos de elemento info
+		Composite elementInfoGrid = new Composite(coordsComposite, SWT.NONE);
+		GridLayout infoGridLayout = new GridLayout();
+		infoGridLayout.numColumns = 4;
+		infoGridLayout.marginHeight = 2;
+		infoGridLayout.marginWidth = 0;
+		elementInfoGrid.setLayout(infoGridLayout);
+		GridData elementInfoGridData = new GridData(GridData.FILL_HORIZONTAL);
+		elementInfoGridData.horizontalSpan = 2;
+		elementInfoGrid.setLayoutData(elementInfoGridData);
+		
+		// ID
+		Label labelId = new Label(elementInfoGrid, SWT.NONE);
+		labelId.setText("ID:");
+		textElementId = new Text(elementInfoGrid, SWT.BORDER);
+		textElementId.setLayoutData(new GridData(100, SWT.DEFAULT));
+		textElementId.setEditable(false);
+		
+		// Sprite
+		Label labelSprite = new Label(elementInfoGrid, SWT.NONE);
+		labelSprite.setText("Sprite:");
+		textElementSprite = new Text(elementInfoGrid, SWT.BORDER);
+		GridData spriteLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		textElementSprite.setLayoutData(spriteLabelData);
+		textElementSprite.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo) {
+					currentElement.setSprite(textElementSprite.getText());
+					regenerateJSON();
+				}
+			}
+		});
+		
+		// X
+		Label labelX = new Label(elementInfoGrid, SWT.NONE);
+		labelX.setText("X:");
+		textElementX = new Text(elementInfoGrid, SWT.BORDER);
+		textElementX.setLayoutData(new GridData(60, SWT.DEFAULT));
+		textElementX.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo) {
+					try {
+						int x = Integer.parseInt(textElementX.getText());
+						currentElement.setX((short) x);
+						regenerateJSON();
+					} catch (NumberFormatException ex) {
+						// Ignorar si no es un número válido
+					}
+				}
+			}
+		});
+		
+		// Y
+		Label labelY = new Label(elementInfoGrid, SWT.NONE);
+		labelY.setText("Y:");
+		textElementY = new Text(elementInfoGrid, SWT.BORDER);
+		textElementY.setLayoutData(new GridData(60, SWT.DEFAULT));
+		textElementY.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo) {
+					try {
+						int y = Integer.parseInt(textElementY.getText());
+						currentElement.setY((short) y);
+						regenerateJSON();
+					} catch (NumberFormatException ex) {
+						// Ignorar si no es un número válido
+					}
+				}
+			}
+		});
+		
+		// Direction
+		Label labelDirection = new Label(elementInfoGrid, SWT.NONE);
+		labelDirection.setText("Dir:");
+		textElementDirection = new Text(elementInfoGrid, SWT.BORDER);
+		textElementDirection.setLayoutData(new GridData(40, SWT.DEFAULT));
+		textElementDirection.addModifyListener(new ModifyListener() {
+			@Override
+			public void modifyText(ModifyEvent e) {
+				if (currentElement != null && !isRestoringElementInfo && currentElement instanceof desperados.dvd.elements.Alive) {
+					try {
+						int direction = Integer.parseInt(textElementDirection.getText());
+						((desperados.dvd.elements.Alive) currentElement).setDirection((byte) direction);
+						regenerateJSON();
+					} catch (NumberFormatException ex) {
+						// Ignorar si no es un número válido
+					}
+				}
+			}
+		});
 		
 		spriteLabel = new Label(coordsComposite, SWT.CENTER | SWT.BORDER);
-		GridData spriteLabelData = new GridData(GridData.FILL_HORIZONTAL);
-		spriteLabelData.heightHint = 64;
-		spriteLabelData.horizontalSpan = 2;
-		spriteLabel.setLayoutData(spriteLabelData);
+		GridData spriteImageLabelData = new GridData(GridData.FILL_HORIZONTAL);
+		spriteImageLabelData.heightHint = 80;
+		spriteImageLabelData.horizontalSpan = 2;
+		spriteLabel.setLayoutData(spriteImageLabelData);
 		spriteLabel.setText("Sprite Preview");
 		
 		Composite navComposite = new Composite(coordsComposite, SWT.NONE);
@@ -855,14 +951,28 @@ public class EditorWindow {
 		textConsole.setText(text);
 	}
 
-	public void setElementInfo(String info) {
-		elementInfo.setText(info);
-	}
-
 	private void writeElementsToDvd() {
 		try {
+			// Guardar el ID del elemento actual antes de escribir
+			String currentElementId = (currentElement != null) ? currentElement.getIdentifier() : null;
+			
 			FileService.writeElementsFromStringToDvd(text.getText());
 			setConsoleText("Writing ELEM section to DVD completed!");
+			
+			// Restaurar la referencia a currentElement desde la lista actualizada
+			if (currentElementId != null) {
+				List<desperados.dvd.elements.Element> elements = FileService.getElements();
+				for (desperados.dvd.elements.Element elem : elements) {
+					if (elem.getIdentifier().equals(currentElementId)) {
+						currentElement = elem;
+						// Recargar la información en los campos
+						displayElementInfo(elem);
+						updateNavigationButtons();
+						break;
+					}
+				}
+			}
+			
 			canvas.redraw();
 		} catch (ServiceException e) {
 			setConsoleText(e.getMessage());
@@ -1080,7 +1190,6 @@ public class EditorWindow {
 			if (distance <= clickRadius) {
 				// Elemento encontrado
 				currentElement = elem;
-				selectedElement = elem;
 				FileService.setSelectedElement(elem);
 				displayElementInfo(elem);
 				updateNavigationButtons();
@@ -1090,29 +1199,41 @@ public class EditorWindow {
 			}
 		}
 		
-		// No se encontró elemento
+		// No se encontré elemento
 		currentElement = null;
-		selectedElement = null;
 		FileService.setSelectedElement(null);
-		setElementInfo("No element at this location");
+		isRestoringElementInfo = true;
+		textElementId.setText("");
+		textElementSprite.setText("");
+		textElementX.setText("");
+		textElementY.setText("");
+		textElementDirection.setText("");
+		spriteLabel.setImage(null);
+		spriteLabel.setText("Click on an element to see its information");
+		isRestoringElementInfo = false;
 		updateNavigationButtons();
-		canvas.redraw();
 		canvas.redraw();
 	}
 
 	private void displayElementInfo(desperados.dvd.elements.Element elem) {
-		StringBuilder info = new StringBuilder();
-		info.append("ID: ").append(elem.getIdentifier()).append("\n");
-		info.append("X: ").append(elem.getX()).append("\n");
-		info.append("Y: ").append(elem.getY()).append("\n");
-		info.append("Sprite: ").append(elem.getSprite()).append("\n");
+		isRestoringElementInfo = true;
+		
+		// Llenar los campos de texto con la información del elemento
+		textElementId.setText(elem.getIdentifier());
+		textElementSprite.setText(elem.getSprite());
+		textElementX.setText(String.valueOf(elem.getX()));
+		textElementY.setText(String.valueOf(elem.getY()));
 		
 		if (elem instanceof desperados.dvd.elements.Alive) {
 			desperados.dvd.elements.Alive alive = (desperados.dvd.elements.Alive) elem;
-			info.append("Direction: ").append(alive.getDirection()).append("\n");
+			textElementDirection.setText(String.valueOf(alive.getDirection()));
+			textElementDirection.setEditable(true);
+		} else {
+			textElementDirection.setText("N/A");
+			textElementDirection.setEditable(false);
 		}
 		
-		setElementInfo(info.toString());
+		isRestoringElementInfo = false;
 		updateSpritePreview(elem);
 	}
 
@@ -1251,7 +1372,6 @@ public class EditorWindow {
 			for (desperados.dvd.elements.Element elem : elements) {
 				if (elem.getIdentifier().equals(prevId)) {
 					currentElement = elem;
-					selectedElement = elem;
 					FileService.setSelectedElement(elem);
 					displayElementInfo(elem);
 					updateNavigationButtons();
@@ -1291,7 +1411,6 @@ public class EditorWindow {
 			for (desperados.dvd.elements.Element elem : elements) {
 				if (elem.getIdentifier().equals(nextId)) {
 					currentElement = elem;
-					selectedElement = elem;
 					FileService.setSelectedElement(elem);
 					displayElementInfo(elem);
 					updateNavigationButtons();
@@ -1305,6 +1424,8 @@ public class EditorWindow {
 		}
 	}
 
+
+
 	private void updateSpritePreview(desperados.dvd.elements.Element elem) {
 		// Obtener la imagen del sprite del elemento
 		org.eclipse.swt.graphics.Image spriteImage = FileService.getElementSpriteImage(elem);
@@ -1315,6 +1436,37 @@ public class EditorWindow {
 		} else {
 			spriteLabel.setImage(null);
 			spriteLabel.setText("No sprite preview available");
+		}
+		
+		// Forzar recomposición del layout para que se muestre el sprite correctamente
+		spriteLabel.getParent().layout();
+	}
+
+	private void regenerateJSON() {
+		// Regenerar el JSON completo con los cambios realizados
+		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+			List<desperados.dvd.elements.Element> elements = FileService.getElements();
+			if (elements != null) {
+				// Guardar la posición del elemento actual
+				desperados.dvd.elements.Element elemToNavigate = currentElement;
+				
+				String newJSON = desperados.util.ElementsJsonWriter.writeToString(elements);
+				isRestoring = true;
+				text.setText(newJSON);
+				comboTexts[activeComboItem] = newJSON;
+				originalComboTexts[activeComboItem] = newJSON;
+				isRestoring = false;
+				
+				// Proteger los listeners de los campos mientras navegamos
+				isRestoringElementInfo = true;
+				
+				// Naveguar al elemento actual para mantenerlo visible
+				if (elemToNavigate != null) {
+					navigateToElement(elemToNavigate);
+				}
+				
+				isRestoringElementInfo = false;
+			}
 		}
 	}
 }

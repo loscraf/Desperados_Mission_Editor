@@ -15,8 +15,6 @@ import desperados.MainGUI;
 import desperados.dvd.DvdContainer;
 import desperados.dvd.DvdReader;
 import desperados.dvd.elements.Element;
-import desperados.dvd.elements.Accessory;
-import desperados.dvd.elements.Alive;
 import desperados.dvd.locations.Location;
 import desperados.dvd.waypoints.WaypointRoute;
 import desperados.exception.DvdReadException;

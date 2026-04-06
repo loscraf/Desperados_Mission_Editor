@@ -1,5 +1,6 @@
 package desperados.dvd.chunk;
 
+/*
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -9,9 +10,19 @@ import java.io.IOException;
 import org.apache.tools.bzip2.CBZip2InputStream;
 
 import desperados.util.Bitmap;
+*/
 
+/**
+ * Clase Background para lectura de chunks BGND del archivo DVD.
+ * 
+ * Los métodos fueron comentados porque:
+ * - No se encontraron referencias directas (la clase se carga dinámicamente por reflexión en DvdReader)
+ * - El código parece ser experimental/incompleto para procesar fondos de mapas
+ * - Se mantienen comentados por si se necesitan en el futuro para completar esta funcionalidad
+ */
 public class Background extends Chunk {
 
+	/*
 	private void readChunk2() throws IOException {
 		
 		// check if file already exists (similar to dvm)
@@ -19,7 +30,7 @@ public class Background extends Chunk {
 	    int nameLength = stream.readShort();
 		String name = stream.readString(nameLength);
 		
-		/* TODO */
+		// TODO 
 		String bitmapFilename = "C:/Files/Desperados/Game/Data/Levels/dvm/" + name + ".bmp";
 		
 		int width  = stream.readShort();
@@ -76,4 +87,5 @@ public class Background extends Chunk {
 		}
 		return bitmapRGB888;
 	}
+	*/
 }
