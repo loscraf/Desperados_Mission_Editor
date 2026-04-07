@@ -47,7 +47,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.11";
+	private final static String appVersion = "v1.2";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -136,6 +136,7 @@ public class EditorWindow {
 	private String[] comboItems;
 	private String[] comboTexts;
 	private int[] textPositions;
+	private int[] unsavedChanges;
 
 	private void initComboItems() {
 		activeComboItem = 0;
@@ -151,9 +152,12 @@ public class EditorWindow {
 		
 		comboTexts = new String[comboItems.length];
 		originalComboTexts = new String[comboItems.length];
+		unsavedChanges = new int[comboItems.length];
+
 		for (int i = 0; i < comboTexts.length; i++) {
 			comboTexts[i] = "TODO";
 			originalComboTexts[i] = "TODO";
+			unsavedChanges[i] = 0;
 		}
 		
 		textPositions = new int[comboItems.length];
@@ -738,6 +742,7 @@ public class EditorWindow {
 					originalComboTexts[activeComboItem] = currentContent;
 					text.redraw();
 					saveToHistory();
+					markCurrentSectionAsChanged();
 					
 					// Si estamos en ELEM y hay un elemento seleccionado, intentar actualizar el panel
 					if (activeComboItem == ScriptItems.ELEM.ordinal() && currentElement != null) {
@@ -825,6 +830,7 @@ public class EditorWindow {
 						currentElement.setX((short) x);
 						regenerateJSON();
 						saveToHistory();
+						markCurrentSectionAsChanged();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -845,6 +851,7 @@ public class EditorWindow {
 						currentElement.setY((short) y);
 						regenerateJSON();
 						saveToHistory();
+						markCurrentSectionAsChanged();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -865,6 +872,7 @@ public class EditorWindow {
 						((desperados.dvd.elements.Alive) currentElement).setDirection((byte) direction);
 						regenerateJSON();
 						saveToHistory();
+						markCurrentSectionAsChanged();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -885,6 +893,7 @@ public class EditorWindow {
 					currentElement.setDvf(textElementDvf.getText());
 					regenerateJSON();
 					saveToHistory();
+					markCurrentSectionAsChanged();
 				}
 			}
 		});
@@ -901,6 +910,7 @@ public class EditorWindow {
 					currentElement.setSprite(textElementSprite.getText());
 					regenerateJSON();
 					saveToHistory();
+					markCurrentSectionAsChanged();
 				}
 			}
 		});
@@ -928,6 +938,9 @@ public class EditorWindow {
 								java.lang.reflect.Method setter = npc.getClass().getMethod("setCharacter", charClass);
 								setter.invoke(npc, enumConstant);
 								regenerateJSON();
+								saveToHistory();
+								markCurrentSectionAsChanged();
+
 								return;
 							}
 						}
@@ -990,14 +1003,24 @@ public class EditorWindow {
 			public void widgetSelected(SelectionEvent event) {
 				setConsoleText("");
 				
-				String sectionName = combo.getText();
+				String sectionName = getCurrentSectionFriendlyName();
+				int pendingChanges = getCurrentSectionUnsavedChanges();
+
+				// Si no hay cambios reales, no preguntar ni escribir
+				if (!hasCurrentSectionRealChanges()) {
+					setConsoleText("No changes to write in " + sectionName + ".");
+					return;
+				}
+
+				String changeWord = (pendingChanges == 1) ? "change" : "changes";
 
 				MessageBox confirmBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
 				confirmBox.setText("Confirm Write");
 				confirmBox.setMessage(
-					"Are you sure you want to write the current section to file?\n\n" +
+					"You have " + pendingChanges + " unsaved " + changeWord + " in this section.\n\n" +
 					"Section: " + sectionName + "\n\n" +
-					"This will overwrite the data in the mission file."
+					"Are you sure you want to write them to file?\n" +
+					"This will overwrite the mission data on disk."
 				);
 
 				int result = confirmBox.open();
@@ -1034,6 +1057,46 @@ public class EditorWindow {
 		textConsole.setText(text);
 	}
 
+	private void markCurrentSectionAsChanged() {
+		if (activeComboItem >= 0 && activeComboItem < unsavedChanges.length) {
+			unsavedChanges[activeComboItem]++;
+		}
+	}
+
+	private void resetCurrentSectionUnsavedChanges() {
+		if (activeComboItem >= 0 && activeComboItem < unsavedChanges.length) {
+			unsavedChanges[activeComboItem] = 0;
+		}
+	}
+
+	private int getCurrentSectionUnsavedChanges() {
+		if (activeComboItem >= 0 && activeComboItem < unsavedChanges.length) {
+			return unsavedChanges[activeComboItem];
+		}
+		return 0;
+	}
+
+	private boolean hasCurrentSectionRealChanges() {
+		return getCurrentSectionUnsavedChanges() > 0;
+	}
+
+	private String getCurrentSectionFriendlyName() {
+		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+			return "Elements (ELEM)";
+		} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
+			return "Waypoints (WAYS)";
+		} else if (activeComboItem == ScriptItems.SCRP.ordinal()) {
+			return "Locations (SCRP)";
+		} else if (activeComboItem == ScriptItems.SCB.ordinal()) {
+			return "Mission Script (SCB)";
+		} else if (activeComboItem == ScriptItems.BUIL.ordinal()) {
+			return "Buildings / Doors (BUIL)";
+		} else if (activeComboItem == ScriptItems.COORDS.ordinal()) {
+			return "Coordinate Parser";
+		}
+		return combo.getText();
+	}
+
 	private void writeElementsToDvd() {
 		try {
 			// Guardar el ID del elemento actual antes de escribir
@@ -1041,6 +1104,7 @@ public class EditorWindow {
 			
 			FileService.writeElementsFromStringToDvd(text.getText());
 			setConsoleText("Writing ELEM section to DVD completed!");
+			resetCurrentSectionUnsavedChanges();
 			
 			// Restaurar la referencia a currentElement desde la lista actualizada
 			if (currentElementId != null) {
@@ -1080,6 +1144,7 @@ public class EditorWindow {
 				e.printStackTrace();
 			}
 			setConsoleText("Writing WAYS section to DVD completed!");
+			resetCurrentSectionUnsavedChanges();
 		}
 	}
 
@@ -1091,6 +1156,7 @@ public class EditorWindow {
 			e.printStackTrace();
 		}
 		setConsoleText("Writing SCRP section to DVD completed!");
+		resetCurrentSectionUnsavedChanges();
 	}
 
 	private void writeBuildingsToDvd() {
@@ -1113,6 +1179,7 @@ public class EditorWindow {
 		}
 		
 		setConsoleText("Writing mission script to SCB completed!");
+		resetCurrentSectionUnsavedChanges();
 	}
 
 	private void applySearchFilter(String searchTerm) {
