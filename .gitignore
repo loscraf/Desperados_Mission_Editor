@@ -12,8 +12,8 @@
 .gradle/file-system.probe
 .gradle/buildOutputCleanup/buildOutputCleanup.lock
 
-build/distributions/DesperadosTools-1.0.tar
-build/distributions/DesperadosTools-1.0.zip
+build/distributions/Desperados_Mission_Editor_v1.x-1.0.zip
+build/distributions/Desperados_Mission_Editor_v1.x-1.0.tar
 
 build/classes/java/main/desperados/ui/EditorWindow.class
 build/classes/java/main/desperados/ui/EditorWindow$1.class

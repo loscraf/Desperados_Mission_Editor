@@ -12,7 +12,7 @@ public class PropertiesHandler {
 	private static String propertiesPath;
 
 	public static void initProperties() {
-		propertiesPath = "." + File.separator + "DesperadosTools.properties";
+		propertiesPath = "." + File.separator + "Desperados_Mission_Editor_v1.x.properties";
 		File file = new File(propertiesPath);
 		if (!file.exists()) {
 			try {

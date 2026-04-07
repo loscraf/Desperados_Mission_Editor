@@ -17,7 +17,7 @@
 @if "%DEBUG%"=="" @echo off
 @rem ##########################################################################
 @rem
-@rem  DesperadosTools startup script for Windows
+@rem  Desperados_Mission_Editor_v1.x startup script for Windows
 @rem
 @rem ##########################################################################
 
@@ -68,10 +68,10 @@ goto fail
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\DesperadosTools-1.0.jar;%APP_HOME%\lib\bzip2.jar;%APP_HOME%\lib\jackson-annotations-2.8.7.jar;%APP_HOME%\lib\jackson-core-2.8.7.jar;%APP_HOME%\lib\jackson-databind-2.8.7.jar;%APP_HOME%\lib\org.eclipse.swt.win32.win32.x86_64_3.105.0.v20160603-0902.jar;%APP_HOME%\lib\swing2swt.jar
+set CLASSPATH=%APP_HOME%\lib\Desperados_Mission_Editor_v1.x.jar;%APP_HOME%\lib\bzip2.jar;%APP_HOME%\lib\jackson-annotations-2.8.7.jar;%APP_HOME%\lib\jackson-core-2.8.7.jar;%APP_HOME%\lib\jackson-databind-2.8.7.jar;%APP_HOME%\lib\org.eclipse.swt.win32.win32.x86_64_3.105.0.v20160603-0902.jar;%APP_HOME%\lib\swing2swt.jar
 
 
-@rem Execute DesperadosTools
+@rem Execute Desperados_Mission_Editor_v1.x
 "%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %DESPERADOS_TOOLS_OPTS%  -classpath "%CLASSPATH%" desperados.MainGUI %*
 
 :end
