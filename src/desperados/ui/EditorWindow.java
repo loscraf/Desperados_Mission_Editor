@@ -47,7 +47,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.1";
+	private final static String appVersion = "v1.11";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -126,7 +126,7 @@ public class EditorWindow {
 	private ArrayList<Integer> historyScroll;
 	private ArrayList<Integer> historyActiveItem;
 	private int historyIndex;
-	private static final int MAX_HISTORY = 10000;
+	private static final int MAX_HISTORY = 1000000;
 	private Button undoButton;
 	private Button redoButton;
 	private boolean isRestoring = false;
@@ -757,25 +757,21 @@ public class EditorWindow {
 		    }
 		});
 		
+		installGlobalUndoRedoInterceptor(text);
+
 		text.addKeyListener(new KeyAdapter() {
-		    @Override
-		    public void keyPressed(KeyEvent e) {
-		    	if (e.stateMask == SWT.CTRL && e.keyCode == 'z') {
-		    		undo();
-		    		e.doit = false;
-		    	} else if (e.stateMask == SWT.CTRL && e.keyCode == 'y') {
-		    		redo();
-		    		e.doit = false;
-		    	}
-		        if (e.stateMask == SWT.CTRL && e.keyCode == 'a') {
-		            text.selectAll();
-		            e.doit = false;
-		        }
-		        setConsoleText("");
-		    }
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if ((e.stateMask & SWT.CTRL) != 0 && (e.keyCode == 'a' || e.keyCode == 'A')) {
+					text.selectAll();
+					e.doit = false;
+				}
+				setConsoleText("");
+			}
 		});
 		
 		textConsole = new StyledText(contentComposite, SWT.BORDER | SWT.H_SCROLL);
+		installGlobalUndoRedoInterceptor(textConsole);
 		textConsole.setFont(new Font(display, new FontData("Courier New", 10, SWT.NORMAL)));
 		textConsole.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		
@@ -788,6 +784,7 @@ public class EditorWindow {
 		coordsComposite.setLayoutData(gd);
 		
 		textCoords = new StyledText(coordsComposite, SWT.BORDER);
+		installGlobalUndoRedoInterceptor(textCoords);
 		textCoords.setFont(new Font(display, new FontData("Courier New", 10, SWT.NORMAL)));
 		textCoords.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		
@@ -941,6 +938,15 @@ public class EditorWindow {
 			}
 		});
 		
+		// Interceptar Ctrl+Z / Ctrl+Y en todos los campos del panel rápido
+		installGlobalUndoRedoInterceptor(textElementId);
+		installGlobalUndoRedoInterceptor(textElementX);
+		installGlobalUndoRedoInterceptor(textElementY);
+		installGlobalUndoRedoInterceptor(textElementDirection);
+		installGlobalUndoRedoInterceptor(textElementDvf);
+		installGlobalUndoRedoInterceptor(textElementSprite);
+		installGlobalUndoRedoInterceptor(textElementCharacter);
+
 		spriteLabel = new Label(coordsComposite, SWT.CENTER | SWT.BORDER);
 		GridData spriteImageLabelData = new GridData(GridData.FILL_HORIZONTAL);
 		spriteImageLabelData.heightHint = 80;
@@ -976,26 +982,43 @@ public class EditorWindow {
 		    }
 		});
 		
+		//Escribir cambios en el archivo
 	    Button buttonUpdate = new Button(contentComposite, SWT.NONE);
-	    buttonUpdate.setText("Write Current Section To File");
-	    buttonUpdate.addSelectionListener(new SelectionAdapter() {
-	        @Override
-	        public void widgetSelected(SelectionEvent event) {
-	        	setConsoleText("");
-	        	
-	        	if (activeComboItem == ScriptItems.ELEM.ordinal()) {
-	        		writeElementsToDvd();
-	        	} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
-	        		writeWaypointsToDvd();
-	        	} else if (activeComboItem == ScriptItems.SCRP.ordinal()) {
-	        		writeLocationsToDvd();
-	        	} else if (activeComboItem == ScriptItems.SCB.ordinal()) {
-	        		writeScriptToScb();
-	        	} else if (activeComboItem == ScriptItems.BUIL.ordinal()) {
-	        		writeBuildingsToDvd();
-	        	}
-	        }
-	    });
+		buttonUpdate.setText("Write Current Section To File");
+		buttonUpdate.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent event) {
+				setConsoleText("");
+				
+				String sectionName = combo.getText();
+
+				MessageBox confirmBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
+				confirmBox.setText("Confirm Write");
+				confirmBox.setMessage(
+					"Are you sure you want to write the current section to file?\n\n" +
+					"Section: " + sectionName + "\n\n" +
+					"This will overwrite the data in the mission file."
+				);
+
+				int result = confirmBox.open();
+				if (result != SWT.YES) {
+					setConsoleText("Write cancelled.");
+					return;
+				}
+
+				if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+					writeElementsToDvd();
+				} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
+					writeWaypointsToDvd();
+				} else if (activeComboItem == ScriptItems.SCRP.ordinal()) {
+					writeLocationsToDvd();
+				} else if (activeComboItem == ScriptItems.SCB.ordinal()) {
+					writeScriptToScb();
+				} else if (activeComboItem == ScriptItems.BUIL.ordinal()) {
+					writeBuildingsToDvd();
+				}
+			}
+		});
 	    
 	    // Establecer tamaño y posición del shell
 	    shell.setSize(1400, 900);
@@ -1249,6 +1272,21 @@ public class EditorWindow {
 		if (redoButton != null) {
 			redoButton.setEnabled(historyIndex < historyStack.size() - 1);
 		}
+	}
+
+	private void installGlobalUndoRedoInterceptor(Control control) {
+		control.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if ((e.stateMask & SWT.CTRL) != 0 && (e.keyCode == 'z' || e.keyCode == 'Z')) {
+					undo();
+					e.doit = false;
+				} else if ((e.stateMask & SWT.CTRL) != 0 && (e.keyCode == 'y' || e.keyCode == 'Y')) {
+					redo();
+					e.doit = false;
+				}
+			}
+		});
 	}
 
 	private void detectClickedElement(int clickX, int clickY) {
