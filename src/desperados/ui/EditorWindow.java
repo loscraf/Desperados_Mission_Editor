@@ -126,7 +126,7 @@ public class EditorWindow {
 	private ArrayList<Integer> historyScroll;
 	private ArrayList<Integer> historyActiveItem;
 	private int historyIndex;
-	private static final int MAX_HISTORY = 1000;
+	private static final int MAX_HISTORY = 10000;
 	private Button undoButton;
 	private Button redoButton;
 	private boolean isRestoring = false;
@@ -723,6 +723,9 @@ public class EditorWindow {
 	    text.setText(comboTexts[activeComboItem]);
 	    isRestoring = false;
 	    isFirstChange = true;
+	    // Guardar estado inicial en historial
+	    saveToHistory();
+	    isFirstChange = true;  // Reset para que el próximo cambio también se guarde
 		text.addModifyListener(new ModifyListener() {
 			public void modifyText(ModifyEvent event) {
 				if (!isRestoring) {
@@ -735,6 +738,11 @@ public class EditorWindow {
 					originalComboTexts[activeComboItem] = currentContent;
 					text.redraw();
 					saveToHistory();
+					
+					// Si estamos en ELEM y hay un elemento seleccionado, intentar actualizar el panel
+					if (activeComboItem == ScriptItems.ELEM.ordinal() && currentElement != null) {
+						updatePanelFromJSON();
+					}
 				}
 			}
 		});
@@ -819,6 +827,7 @@ public class EditorWindow {
 						int x = Integer.parseInt(textElementX.getText());
 						currentElement.setX((short) x);
 						regenerateJSON();
+						saveToHistory();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -838,6 +847,7 @@ public class EditorWindow {
 						int y = Integer.parseInt(textElementY.getText());
 						currentElement.setY((short) y);
 						regenerateJSON();
+						saveToHistory();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -857,6 +867,7 @@ public class EditorWindow {
 						int direction = Integer.parseInt(textElementDirection.getText());
 						((desperados.dvd.elements.Alive) currentElement).setDirection((byte) direction);
 						regenerateJSON();
+						saveToHistory();
 					} catch (NumberFormatException ex) {
 						// Ignorar si no es un número válido
 					}
@@ -876,6 +887,7 @@ public class EditorWindow {
 				if (currentElement != null && !isRestoringElementInfo) {
 					currentElement.setDvf(textElementDvf.getText());
 					regenerateJSON();
+					saveToHistory();
 				}
 			}
 		});
@@ -891,6 +903,7 @@ public class EditorWindow {
 				if (currentElement != null && !isRestoringElementInfo) {
 					currentElement.setSprite(textElementSprite.getText());
 					regenerateJSON();
+					saveToHistory();
 				}
 			}
 		});
@@ -1205,6 +1218,28 @@ public class EditorWindow {
 		}
 		
 		isRestoring = false;
+		
+		// Si volvemos a ELEM, actualizar los elementos desde el JSON restaurado
+		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+			try {
+				FileService.readElementsFromString(comboTexts[activeComboItem]);
+				// Restaurar la referencia a currentElement con el elemento actualizado
+				if (currentElement != null) {
+					String currentElementId = currentElement.getIdentifier();
+					List<desperados.dvd.elements.Element> elements = FileService.getElements();
+					for (desperados.dvd.elements.Element elem : elements) {
+						if (elem.getIdentifier().equals(currentElementId)) {
+							currentElement = elem;
+							// Actualizar los campos del panel con el nuevo valor
+							displayElementInfo(elem);
+							break;
+						}
+					}
+				}
+			} catch (ServiceException e) {
+				// Ignorar errores
+			}
+		}
 	}
 
 	private void updateUndoRedoButtons() {
@@ -1549,6 +1584,65 @@ public class EditorWindow {
 				
 				isRestoringElementInfo = false;
 			}
+		}
+	}
+
+	private void updatePanelFromJSON() {
+		// Actualizar los campos del panel en tiempo real mientras se edita el JSON
+		if (currentElement == null) {
+			return;
+		}
+		
+		try {
+			// Buscar el elemento actual en el JSON actualizado
+			String jsonContent = text.getText();
+			String identifier = currentElement.getIdentifier();
+			String searchPattern = "\"identifier\" : \"" + identifier + "\"";
+			int elementIndex = jsonContent.indexOf(searchPattern);
+			
+			if (elementIndex < 0) {
+				// Intenta otro formato
+				searchPattern = "\"identifier\":\"" + identifier + "\"";
+				elementIndex = jsonContent.indexOf(searchPattern);
+			}
+			
+			if (elementIndex >= 0) {
+				// Encontrar el bloque correspondiente (entre { y })
+				int blockStart = jsonContent.lastIndexOf("{", elementIndex);
+				int blockEnd = jsonContent.indexOf("}", elementIndex);
+				
+				if (blockStart >= 0 && blockEnd > blockStart) {
+					String elementBlock = jsonContent.substring(blockStart, blockEnd + 1);
+					
+					// Extraer valores usando regex simple
+					isRestoringElementInfo = true;
+					
+					// Buscar "x" : número
+					java.util.regex.Pattern xPattern = java.util.regex.Pattern.compile("\"x\"\\s*:\\s*(\\d+)");
+					java.util.regex.Matcher xMatcher = xPattern.matcher(elementBlock);
+					if (xMatcher.find()) {
+						textElementX.setText(xMatcher.group(1));
+					}
+					
+					// Buscar "y" : número
+					java.util.regex.Pattern yPattern = java.util.regex.Pattern.compile("\"y\"\\s*:\\s*(\\d+)");
+					java.util.regex.Matcher yMatcher = yPattern.matcher(elementBlock);
+					if (yMatcher.find()) {
+						textElementY.setText(yMatcher.group(1));
+					}
+					
+					// Buscar "direction" : número
+					java.util.regex.Pattern dirPattern = java.util.regex.Pattern.compile("\"direction\"\\s*:\\s*(\\d+)");
+					java.util.regex.Matcher dirMatcher = dirPattern.matcher(elementBlock);
+					if (dirMatcher.find()) {
+						textElementDirection.setText(dirMatcher.group(1));
+					}
+					
+					isRestoringElementInfo = false;
+				}
+			}
+		} catch (Exception e) {
+			// Ignorar errores
 		}
 	}
 }

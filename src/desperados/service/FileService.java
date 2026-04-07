@@ -117,6 +117,17 @@ public class FileService {
 		return scbReader.toString();
 	}
 
+	public static void readElementsFromString(String str) throws ServiceException {
+		List<Element> elements = null;
+		try {
+			elements = Arrays.asList(ElementsJsonReader.readFromString(str));
+			dvdContainer.setElements(elements);
+			elementService.setElements(elements);
+		} catch (JsonParseException e) {
+			throw new ServiceException(e.getMessage());
+		}
+	}
+
 	public static void writeElementsFromStringToDvd(String str) throws ServiceException {
 		if (!dvdFile.exists()) {
 			return;
