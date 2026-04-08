@@ -1717,12 +1717,53 @@ public class EditorWindow {
 			return "";
 		}
 
-		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
-			return buildElemDiffSummary(savedText, currentText);
+		String sectionName = getSectionDisplayName(activeComboItem);
+
+		switch (activeComboItem) {
+			case 0: // ELEM
+				return buildSectionHeader(sectionName) + buildElemDiffSummary(savedText, currentText);
+
+			case 1: // WAYS
+				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+
+			case 2: // SCRP
+				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+
+			case 3: // BUIL
+				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+
+			case 4: // SCB
+				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+
+			default:
+				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+		}
+	}
+
+	private String getSectionDisplayName(int comboIndex) {
+		switch (comboIndex) {
+			case 0: return "ELEM";
+			case 1: return "WAYS";
+			case 2: return "SCRP";
+			case 3: return "SCB";
+			case 4: return "BUIL";
+			default: return "UNKNOWN";
+		}
+	}
+
+	private String buildSectionHeader(String sectionName) {
+		return "[" + sectionName + "]\n";
+	}
+
+	private String buildGenericLogicalSummary(String oldText, String newText) {
+		if (oldText == null) oldText = "";
+		if (newText == null) newText = "";
+
+		if (oldText.equals(newText)) {
+			return "- No field-level summary available\n";
 		}
 
-		// Para otras secciones, por ahora algo simple
-		return "- Text/content modified";
+		return "- Logical changes detected in this section\n";
 	}
 
 	private String buildElemDiffSummary(String oldText, String newText) {

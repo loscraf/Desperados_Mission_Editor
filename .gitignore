@@ -14,6 +14,12 @@
 
 build/distributions/Desperados_Mission_Editor_v1.x-1.0.zip
 build/distributions/Desperados_Mission_Editor_v1.x-1.0.tar
+build/libs/Desperados_Mission_Editor_v1.x-1.0.jar
+
+build/classes/java/main/desperados/util/PropertiesHandler.class
+
+build/classes/java/main/desperados/service/ElementService.class
+build/classes/java/main/desperados/service/FileService.class
 
 build/classes/java/main/desperados/ui/EditorWindow.class
 build/classes/java/main/desperados/ui/EditorWindow$1.class
@@ -26,6 +32,7 @@ build/classes/java/main/desperados/ui/EditorWindow$5$1.class
 build/classes/java/main/desperados/ui/EditorWindow$6.class
 build/classes/java/main/desperados/ui/EditorWindow$6$1.class
 build/classes/java/main/desperados/ui/EditorWindow$7.class
+build/classes/java/main/desperados/ui/EditorWindow$7$1.class
 build/classes/java/main/desperados/ui/EditorWindow$8.class
 build/classes/java/main/desperados/ui/EditorWindow$9.class
 build/classes/java/main/desperados/ui/EditorWindow$10.class
@@ -44,6 +51,19 @@ build/classes/java/main/desperados/ui/EditorWindow$22.class
 build/classes/java/main/desperados/ui/EditorWindow$23.class
 build/classes/java/main/desperados/ui/EditorWindow$24.class
 build/classes/java/main/desperados/ui/EditorWindow$25.class
+build/classes/java/main/desperados/ui/EditorWindow$26.class
+build/classes/java/main/desperados/ui/EditorWindow$27.class
+build/classes/java/main/desperados/ui/EditorWindow$28.class
+build/classes/java/main/desperados/ui/EditorWindow$29.class
+build/classes/java/main/desperados/ui/EditorWindow$30.class
+build/classes/java/main/desperados/ui/EditorWindow$31.class
+build/classes/java/main/desperados/ui/EditorWindow$32.class
+build/classes/java/main/desperados/ui/EditorWindow$33.class
+build/classes/java/main/desperados/ui/EditorWindow$34.class
+build/classes/java/main/desperados/ui/EditorWindow$35.class
+build/classes/java/main/desperados/ui/EditorWindow$36.class
+build/classes/java/main/desperados/ui/EditorWindow$37.class
+build/classes/java/main/desperados/ui/EditorWindow$38.class
 
 build/tmp/compileJava/previous-compilation-data.bin
 
