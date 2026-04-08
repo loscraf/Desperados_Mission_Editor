@@ -850,7 +850,7 @@ public class EditorWindow {
 		textCoords.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		
 		Label infoLabel = new Label(coordsComposite, SWT.NONE);
-		infoLabel.setText("Element Info:");
+		infoLabel.setText("Element Info Panel:");
 		GridData infoLabelData = new GridData(GridData.FILL_HORIZONTAL);
 		infoLabelData.horizontalSpan = 2;
 		infoLabel.setLayoutData(infoLabelData);
@@ -883,11 +883,16 @@ public class EditorWindow {
 				if (currentElement != null && !isRestoringElementInfo) {
 					try {
 						int x = Integer.parseInt(textElementX.getText());
+
+						isUpdatingFromPanel = true;
 						currentElement.setX((short) x);
 						regenerateJSON();
 						saveToHistory();
 						markCurrentSectionAsChanged();
+						isUpdatingFromPanel = false;
+
 					} catch (NumberFormatException ex) {
+						isUpdatingFromPanel = false;
 						// Ignorar si no es un número válido
 					}
 				}
@@ -904,11 +909,16 @@ public class EditorWindow {
 				if (currentElement != null && !isRestoringElementInfo) {
 					try {
 						int y = Integer.parseInt(textElementY.getText());
+
+						isUpdatingFromPanel = true;
 						currentElement.setY((short) y);
 						regenerateJSON();
 						saveToHistory();
 						markCurrentSectionAsChanged();
+						isUpdatingFromPanel = false;
+
 					} catch (NumberFormatException ex) {
+						isUpdatingFromPanel = false;
 						// Ignorar si no es un número válido
 					}
 				}
@@ -925,11 +935,16 @@ public class EditorWindow {
 				if (currentElement != null && !isRestoringElementInfo && currentElement instanceof desperados.dvd.elements.Alive) {
 					try {
 						int direction = Integer.parseInt(textElementDirection.getText());
+
+						isUpdatingFromPanel = true;
 						((desperados.dvd.elements.Alive) currentElement).setDirection((byte) direction);
 						regenerateJSON();
 						saveToHistory();
 						markCurrentSectionAsChanged();
+						isUpdatingFromPanel = false;
+
 					} catch (NumberFormatException ex) {
+						isUpdatingFromPanel = false;
 						// Ignorar si no es un número válido
 					}
 				}
@@ -946,10 +961,12 @@ public class EditorWindow {
 			@Override
 			public void modifyText(ModifyEvent e) {
 				if (currentElement != null && !isRestoringElementInfo) {
+					isUpdatingFromPanel = true;
 					currentElement.setDvf(textElementDvf.getText());
 					regenerateJSON();
 					saveToHistory();
 					markCurrentSectionAsChanged();
+					isUpdatingFromPanel = false;
 				}
 			}
 		});
@@ -963,10 +980,12 @@ public class EditorWindow {
 			@Override
 			public void modifyText(ModifyEvent e) {
 				if (currentElement != null && !isRestoringElementInfo) {
+					isUpdatingFromPanel = true;
 					currentElement.setSprite(textElementSprite.getText());
 					regenerateJSON();
 					saveToHistory();
 					markCurrentSectionAsChanged();
+					isUpdatingFromPanel = false;
 				}
 			}
 		});
@@ -992,15 +1011,19 @@ public class EditorWindow {
 							if (enumConstant.toString().equalsIgnoreCase(charValue)) {
 								// Obtener el setter y llamarlo
 								java.lang.reflect.Method setter = npc.getClass().getMethod("setCharacter", charClass);
+
+								isUpdatingFromPanel = true;
 								setter.invoke(npc, enumConstant);
 								regenerateJSON();
 								saveToHistory();
 								markCurrentSectionAsChanged();
+								isUpdatingFromPanel = false;
 
 								return;
 							}
 						}
 					} catch (Exception ex) {
+						isUpdatingFromPanel = false;
 						// Ignorar si hay error en la conversión
 					}
 				}
@@ -2001,10 +2024,36 @@ public class EditorWindow {
 
 				String newJSON = desperados.util.ElementsJsonWriter.writeToString(elements);
 
+				// Guardar posición actual del JSON
+				int caret = 0;
+				int topIndex = 0;
+				try {
+					caret = text.getCaretOffset();
+					topIndex = text.getTopIndex();
+				} catch (Exception ex) {
+					// ignorar
+				}
+
 				isRestoring = true;
 				text.setText(newJSON);
 				comboTexts[activeComboItem] = newJSON;
 				originalComboTexts[activeComboItem] = newJSON;
+
+				// Restaurar posición del JSON
+				try {
+					if (caret >= 0 && caret <= text.getCharCount()) {
+						text.setCaretOffset(caret);
+					}
+				} catch (Exception ex) {
+					// ignorar
+				}
+
+				try {
+					text.setTopIndex(topIndex);
+				} catch (Exception ex) {
+					// ignorar
+				}
+
 				isRestoring = false;
 
 				// volver a parsear desde el JSON recién regenerado para que FileService y currentElement queden siempre alineados
@@ -2025,13 +2074,17 @@ public class EditorWindow {
 					// ignorar
 				}
 
-				isRestoringElementInfo = true;
-
 				if (currentElement != null) {
-					displayElementInfo(currentElement);
+					if (!isUpdatingFromPanel) {
+						// Si el cambio vino desde JSON o restore, refrescar panel + navegar
+						isRestoringElementInfo = true;
+						displayElementInfo(currentElement);
+						isRestoringElementInfo = false;
+					}
+
+					// Siempre mantener el JSON enfocado en el elemento actual
 					navigateToElement(currentElement);
 				}
-				isRestoringElementInfo = false;
 			}
 		}
 	}
