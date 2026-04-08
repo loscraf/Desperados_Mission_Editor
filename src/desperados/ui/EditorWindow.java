@@ -47,7 +47,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.2";
+	private final static String appVersion = "v1.3";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -131,6 +131,15 @@ public class EditorWindow {
 	private Button redoButton;
 	private boolean isRestoring = false;
 	private boolean isFirstChange = true;
+	private boolean isUpdatingFromPanel = false;
+
+	private String[] lastSavedTexts;
+
+	// cambios lógicos pendientes (ej: ELEM:x:guard_1)
+	private java.util.LinkedHashSet<String> pendingLogicalChanges = new java.util.LinkedHashSet<>();
+
+	// valor inicial al entrar en edición de un campo del panel rojo
+	private java.util.HashMap<Text, String> fieldEditStartValues = new java.util.HashMap<>();
 	
 	private int activeComboItem;
 	private String[] comboItems;
@@ -152,11 +161,13 @@ public class EditorWindow {
 		
 		comboTexts = new String[comboItems.length];
 		originalComboTexts = new String[comboItems.length];
+		lastSavedTexts = new String[comboItems.length];
 		unsavedChanges = new int[comboItems.length];
 
 		for (int i = 0; i < comboTexts.length; i++) {
 			comboTexts[i] = "TODO";
 			originalComboTexts[i] = "TODO";
+			lastSavedTexts[i] = "TODO";
 			unsavedChanges[i] = 0;
 		}
 		
@@ -195,6 +206,7 @@ public class EditorWindow {
 		
 		comboTexts[ScriptItems.COORDS.ordinal()] = "Insert coordinates (x,y) here.";
 		originalComboTexts[ScriptItems.COORDS.ordinal()] = "Insert coordinates (x,y) here.";
+		lastSavedTexts[ScriptItems.COORDS.ordinal()] = "Insert coordinates (x,y) here.";
 		
 		dvdLoaded = true;
 		
@@ -204,26 +216,34 @@ public class EditorWindow {
 
 	private void loadElementText() {
 		String text = FileService.getElementText();
-		comboTexts[ScriptItems.ELEM.ordinal()] = text;
-		originalComboTexts[ScriptItems.ELEM.ordinal()] = text;
+		int idx = ScriptItems.ELEM.ordinal();
+		comboTexts[idx] = text;
+		originalComboTexts[idx] = text;
+		lastSavedTexts[idx] = text;
 	}
 
 	private void loadScriptText() {
 		String text = FileService.readScbFile();
-		comboTexts[ScriptItems.SCB.ordinal()] = text;
-		originalComboTexts[ScriptItems.SCB.ordinal()] = text;
+		int idx = ScriptItems.SCB.ordinal();
+		comboTexts[idx] = text;
+		originalComboTexts[idx] = text;
+		lastSavedTexts[idx] = text;
 	}
 
 	private void loadLocationsText() {
 		String text = FileService.getLocationText();
-		comboTexts[ScriptItems.SCRP.ordinal()] = text;
-		originalComboTexts[ScriptItems.SCRP.ordinal()] = text;
+		int idx = ScriptItems.SCRP.ordinal();
+		comboTexts[idx] = text;
+		originalComboTexts[idx] = text;
+		lastSavedTexts[idx] = text;
 	}
 
 	private void loadBuildingsText() {
 		String text = FileService.getBuildingsText();
-		comboTexts[ScriptItems.BUIL.ordinal()] = text;
-		originalComboTexts[ScriptItems.BUIL.ordinal()] = text;
+		int idx = ScriptItems.BUIL.ordinal();
+		comboTexts[idx] = text;
+		originalComboTexts[idx] = text;
+		lastSavedTexts[idx] = text;
 	}
 
 	private void loadWaypointText() {
@@ -233,8 +253,10 @@ public class EditorWindow {
 			for (WaypointRoute r : routes) {
 				str += r.toString() + "\n";
 			}
-			comboTexts[ScriptItems.WAYS.ordinal()] = str;
-			originalComboTexts[ScriptItems.WAYS.ordinal()] = str;
+			int idx = ScriptItems.WAYS.ordinal();
+			comboTexts[idx] = str;
+			originalComboTexts[idx] = str;
+			lastSavedTexts[idx] = str;
 		}
 	}
 
@@ -742,10 +764,13 @@ public class EditorWindow {
 					originalComboTexts[activeComboItem] = currentContent;
 					text.redraw();
 					saveToHistory();
-					markCurrentSectionAsChanged();
+
+					// Registrar cambio lógico de esta sección (1 solo cambio humano)
+					registerLogicalTextChange();
 					
 					// Si estamos en ELEM y hay un elemento seleccionado, intentar actualizar el panel
-					if (activeComboItem == ScriptItems.ELEM.ordinal() && currentElement != null) {
+					// PERO solo si el cambio vino desde el JSON, no desde el panel rápido.
+					if (activeComboItem == ScriptItems.ELEM.ordinal() && currentElement != null && !isUpdatingFromPanel) {
 						updatePanelFromJSON();
 					}
 				}
@@ -1002,33 +1027,27 @@ public class EditorWindow {
 			@Override
 			public void widgetSelected(SelectionEvent event) {
 				setConsoleText("");
-				
-				String sectionName = getCurrentSectionFriendlyName();
-				int pendingChanges = getCurrentSectionUnsavedChanges();
 
-				// Si no hay cambios reales, no preguntar ni escribir
-				if (!hasCurrentSectionRealChanges()) {
-					setConsoleText("No changes to write in " + sectionName + ".");
+				if (!hasUnsavedChangesInCurrentSection()) {
+					MessageBox noChangesBox = new MessageBox(shell, SWT.ICON_INFORMATION | SWT.OK);
+					noChangesBox.setText("No Changes");
+					noChangesBox.setMessage("There are no unsaved changes in the current section.");
+					noChangesBox.open();
 					return;
 				}
 
-				String changeWord = (pendingChanges == 1) ? "change" : "changes";
+				int logicalCount = getUnsavedLogicalChangeCount();
 
-				MessageBox confirmBox = new MessageBox(shell, SWT.ICON_WARNING | SWT.YES | SWT.NO);
+				MessageBox confirmBox = new MessageBox(shell, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
 				confirmBox.setText("Confirm Write");
-				confirmBox.setMessage(
-					"You have " + pendingChanges + " unsaved " + changeWord + " in this section.\n\n" +
-					"Section: " + sectionName + "\n\n" +
-					"Are you sure you want to write them to file?\n" +
-					"This will overwrite the mission data on disk."
-				);
-
+				confirmBox.setMessage("Write current section to file?\n\nUnsaved logical changes detected: " + logicalCount);
 				int result = confirmBox.open();
+
 				if (result != SWT.YES) {
-					setConsoleText("Write cancelled.");
+					resyncCurrentElementFromCurrentJson();
 					return;
 				}
-
+				
 				if (activeComboItem == ScriptItems.ELEM.ordinal()) {
 					writeElementsToDvd();
 				} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
@@ -1040,12 +1059,257 @@ public class EditorWindow {
 				} else if (activeComboItem == ScriptItems.BUIL.ordinal()) {
 					writeBuildingsToDvd();
 				}
+
+				// Si se escribió, esta sección pasa a ser el nuevo estado guardado
+				markCurrentSectionAsSaved();
 			}
 		});
 	    
 	    // Establecer tamaño y posición del shell
 	    shell.setSize(1400, 900);
 	    shell.setLocation(100, 100);
+	}
+
+	private String getCurrentSectionKey() {
+		switch (activeComboItem) {
+			case 0: return "ELEM";
+			case 1: return "WAYS";
+			case 2: return "SCRP";
+			case 3: return "BUIL";
+			case 4: return "SCB";
+			case 5: return "COORDS";
+			default: return "UNKNOWN";
+		}
+	}
+
+	private String getCurrentElementKey() {
+		if (activeComboItem != ScriptItems.ELEM.ordinal()) {
+			return "NO_ELEMENT";
+		}
+		if (currentElement == null) {
+			return "NO_ELEMENT";
+		}
+		String id = currentElement.getIdentifier();
+		return (id != null && !id.trim().isEmpty()) ? id.trim() : "NO_ELEMENT";
+	}
+
+	private void registerLogicalFieldChange(String fieldName) {
+		String key = getCurrentSectionKey() + "|" + getCurrentElementKey() + "|" + fieldName;
+
+		String currentSectionText = comboTexts[activeComboItem] != null ? comboTexts[activeComboItem] : "";
+		String savedSectionText = lastSavedTexts[activeComboItem] != null ? lastSavedTexts[activeComboItem] : "";
+
+		boolean differsFromSaved = !currentSectionText.equals(savedSectionText);
+
+		if (differsFromSaved) {
+			pendingLogicalChanges.add(key);
+		} else {
+			pendingLogicalChanges.remove(key);
+		}
+
+		updateDirtyUI();
+	}
+
+	private void registerLogicalTextChange() {
+		String sectionKey = getCurrentSectionKey();
+		String key = sectionKey + ":text";
+
+		String current = comboTexts[activeComboItem];
+		String saved = lastSavedTexts[activeComboItem];
+
+		if (current == null) current = "";
+		if (saved == null) saved = "";
+
+		if (current.equals(saved)) {
+			pendingLogicalChanges.remove(key);
+		} else {
+			pendingLogicalChanges.add(key);
+		}
+
+		updateDirtyUI();
+	}
+
+	private void rebuildLogicalChangesAgainstSavedState() {
+		// Si ELEM quedó exactamente igual al último guardado, eliminar todos los cambios lógicos ELEM
+		int elemIdx = ScriptItems.ELEM.ordinal();
+		String currentElemText = comboTexts[elemIdx] != null ? comboTexts[elemIdx] : "";
+		String savedElemText = lastSavedTexts[elemIdx] != null ? lastSavedTexts[elemIdx] : "";
+
+		if (currentElemText.equals(savedElemText)) {
+			pendingLogicalChanges.removeIf(k -> k.startsWith("ELEM:"));
+		}
+	}
+
+	private boolean hasUnsavedChanges() {
+		for (int i = 0; i < comboTexts.length; i++) {
+			String current = comboTexts[i] != null ? comboTexts[i] : "";
+			String saved = lastSavedTexts[i] != null ? lastSavedTexts[i] : "";
+			if (!current.equals(saved)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean hasUnsavedChangesInCurrentSection() {
+		String current = comboTexts[activeComboItem] != null ? comboTexts[activeComboItem] : "";
+		String saved = lastSavedTexts[activeComboItem] != null ? lastSavedTexts[activeComboItem] : "";
+		return !current.equals(saved);
+	}
+
+	private int countLogicalChangesInElemSection() {
+		String currentJson = comboTexts[ScriptItems.ELEM.ordinal()] != null ? comboTexts[ScriptItems.ELEM.ordinal()] : "";
+		String savedJson = lastSavedTexts[ScriptItems.ELEM.ordinal()] != null ? lastSavedTexts[ScriptItems.ELEM.ordinal()] : "";
+
+		// Si son idénticos, no hay cambios
+		if (currentJson.equals(savedJson)) {
+			return 0;
+		}
+
+		try {
+			// Parsear elementos del JSON guardado
+			FileService.readElementsFromString(savedJson);
+			List<desperados.dvd.elements.Element> savedElements = new ArrayList<>(FileService.getElements());
+
+			// Parsear elementos del JSON actual
+			FileService.readElementsFromString(currentJson);
+			List<desperados.dvd.elements.Element> currentElements = new ArrayList<>(FileService.getElements());
+
+			// Restaurar el estado actual en FileService para no romper nada visualmente
+			FileService.readElementsFromString(currentJson);
+
+			java.util.Map<String, desperados.dvd.elements.Element> savedMap = new java.util.HashMap<>();
+			java.util.Map<String, desperados.dvd.elements.Element> currentMap = new java.util.HashMap<>();
+
+			for (desperados.dvd.elements.Element e : savedElements) {
+				if (e.getIdentifier() != null) {
+					savedMap.put(e.getIdentifier(), e);
+				}
+			}
+
+			for (desperados.dvd.elements.Element e : currentElements) {
+				if (e.getIdentifier() != null) {
+					currentMap.put(e.getIdentifier(), e);
+				}
+			}
+
+			java.util.Set<String> allIds = new java.util.HashSet<>();
+			allIds.addAll(savedMap.keySet());
+			allIds.addAll(currentMap.keySet());
+
+			int changes = 0;
+
+			for (String id : allIds) {
+				desperados.dvd.elements.Element oldElem = savedMap.get(id);
+				desperados.dvd.elements.Element newElem = currentMap.get(id);
+
+				// elemento agregado o eliminado
+				if (oldElem == null || newElem == null) {
+					changes++;
+					continue;
+				}
+
+				// Campos base
+				if (!safeEquals(oldElem.getIdentifier(), newElem.getIdentifier())) changes++;
+				if (!safeEquals(oldElem.getDvf(), newElem.getDvf())) changes++;
+				if (!safeEquals(oldElem.getSprite(), newElem.getSprite())) changes++;
+				if (oldElem.getX() != newElem.getX()) changes++;
+				if (oldElem.getY() != newElem.getY()) changes++;
+
+				// direction si es Alive
+				boolean oldAlive = oldElem instanceof desperados.dvd.elements.Alive;
+				boolean newAlive = newElem instanceof desperados.dvd.elements.Alive;
+				if (oldAlive != newAlive) {
+					changes++;
+				} else if (oldAlive && newAlive) {
+					byte oldDir = ((desperados.dvd.elements.Alive) oldElem).getDirection();
+					byte newDir = ((desperados.dvd.elements.Alive) newElem).getDirection();
+					if (oldDir != newDir) changes++;
+				}
+
+				// character si es NPC
+				boolean oldNpc = oldElem instanceof desperados.dvd.elements.NPC;
+				boolean newNpc = newElem instanceof desperados.dvd.elements.NPC;
+				if (oldNpc != newNpc) {
+					changes++;
+				} else if (oldNpc && newNpc) {
+					Object oldChar = null;
+					Object newChar = null;
+					try {
+						java.lang.reflect.Method getter = desperados.dvd.elements.NPC.class.getMethod("getCharacter");
+						oldChar = getter.invoke((desperados.dvd.elements.NPC) oldElem);
+						newChar = getter.invoke((desperados.dvd.elements.NPC) newElem);
+					} catch (Exception ex) {
+						// ignorar
+					}
+					if (!safeEquals(oldChar, newChar)) changes++;
+				}
+			}
+
+			return changes;
+
+		} catch (Exception e) {
+			// Si el JSON está temporalmente inválido mientras el usuario escribe,
+			// no inventamos conteos raros. Como fallback, 1 cambio.
+			try {
+				FileService.readElementsFromString(currentJson);
+			} catch (Exception ignored) {}
+			return 1;
+		}
+	}
+
+	private boolean safeEquals(Object a, Object b) {
+		if (a == b) return true;
+		if (a == null || b == null) return false;
+		return a.equals(b);
+	}
+
+	private int getUnsavedLogicalChangeCount() {
+		if (!hasUnsavedChanges()) {
+			return 0;
+		}
+
+		int total = 0;
+
+		for (int i = 0; i < comboTexts.length; i++) {
+			String current = comboTexts[i] != null ? comboTexts[i] : "";
+			String saved = lastSavedTexts[i] != null ? lastSavedTexts[i] : "";
+
+			if (current.equals(saved)) {
+				continue;
+			}
+
+			// ELEM: contar cambios lógicos por campo
+			if (i == ScriptItems.ELEM.ordinal()) {
+				total += countLogicalChangesInElemSection();
+			} else {
+				// Otras secciones: por ahora 1 cambio por sección modificada
+				total += 1;
+			}
+		}
+
+		return total;
+	}
+
+	private void markCurrentSectionAsSaved() {
+		lastSavedTexts[activeComboItem] = comboTexts[activeComboItem];
+
+		String currentSectionPrefix = getCurrentSectionKey() + ":";
+		pendingLogicalChanges.removeIf(k -> k.startsWith(currentSectionPrefix));
+
+		updateDirtyUI();
+	}
+
+	private void updateDirtyUI() {
+		int count = getUnsavedLogicalChangeCount();
+		boolean hasChanges = hasUnsavedChanges();
+
+		String baseTitle = appName + " " + appVersion;
+		if (hasChanges) {
+			shell.setText(baseTitle + " * (" + count + " unsaved change" + (count == 1 ? "" : "s") + ")");
+		} else {
+			shell.setText(baseTitle);
+		}
 	}
 
 	private void copyToClipboard(String string) {
@@ -1329,6 +1593,40 @@ public class EditorWindow {
 			} catch (ServiceException e) {
 				// Ignorar errores
 			}
+		}
+
+		registerLogicalTextChange();
+		rebuildLogicalChangesAgainstSavedState();
+		updateDirtyUI();
+	}
+
+	private void resyncCurrentElementFromCurrentJson() {
+		if (activeComboItem != ScriptItems.ELEM.ordinal()) {
+			return;
+		}
+
+		try {
+			String currentElementId = (currentElement != null) ? currentElement.getIdentifier() : null;
+
+			// Reparsear el JSON actual visible
+			FileService.readElementsFromString(comboTexts[activeComboItem]);
+
+			if (currentElementId != null) {
+				List<desperados.dvd.elements.Element> elements = FileService.getElements();
+				for (desperados.dvd.elements.Element elem : elements) {
+					if (elem.getIdentifier().equals(currentElementId)) {
+						currentElement = elem;
+						FileService.setSelectedElement(elem);
+
+						isRestoringElementInfo = true;
+						displayElementInfo(elem);
+						isRestoringElementInfo = false;
+						return;
+					}
+				}
+			}
+		} catch (ServiceException e) {
+			// ignorar
 		}
 	}
 
@@ -1665,28 +1963,43 @@ public class EditorWindow {
 	}
 
 	private void regenerateJSON() {
-		// Regenerar el JSON completo con los cambios realizados
 		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
 			List<desperados.dvd.elements.Element> elements = FileService.getElements();
 			if (elements != null) {
-				// Guardar la posición del elemento actual
-				desperados.dvd.elements.Element elemToNavigate = currentElement;
-				
+				String currentElementId = (currentElement != null) ? currentElement.getIdentifier() : null;
+
 				String newJSON = desperados.util.ElementsJsonWriter.writeToString(elements);
+
 				isRestoring = true;
 				text.setText(newJSON);
 				comboTexts[activeComboItem] = newJSON;
 				originalComboTexts[activeComboItem] = newJSON;
 				isRestoring = false;
-				
-				// Proteger los listeners de los campos mientras navegamos
-				isRestoringElementInfo = true;
-				
-				// Navegar al elemento actual para mantenerlo visible
-				if (elemToNavigate != null) {
-					navigateToElement(elemToNavigate);
+
+				// volver a parsear desde el JSON recién regenerado para que FileService y currentElement queden siempre alineados
+				try {
+					FileService.readElementsFromString(newJSON);
+
+					if (currentElementId != null) {
+						List<desperados.dvd.elements.Element> refreshed = FileService.getElements();
+						for (desperados.dvd.elements.Element elem : refreshed) {
+							if (elem.getIdentifier().equals(currentElementId)) {
+								currentElement = elem;
+								FileService.setSelectedElement(elem);
+								break;
+							}
+						}
+					}
+				} catch (ServiceException e) {
+					// ignorar
 				}
-				
+
+				isRestoringElementInfo = true;
+
+				if (currentElement != null) {
+					displayElementInfo(currentElement);
+					navigateToElement(currentElement);
+				}
 				isRestoringElementInfo = false;
 			}
 		}
@@ -1697,57 +2010,40 @@ public class EditorWindow {
 		if (currentElement == null) {
 			return;
 		}
-		
+
 		try {
-			// Buscar el elemento actual en el JSON actualizado
-			String jsonContent = text.getText();
-			String identifier = currentElement.getIdentifier();
-			String searchPattern = "\"identifier\" : \"" + identifier + "\"";
-			int elementIndex = jsonContent.indexOf(searchPattern);
-			
-			if (elementIndex < 0) {
-				// Intenta otro formato
-				searchPattern = "\"identifier\":\"" + identifier + "\"";
-				elementIndex = jsonContent.indexOf(searchPattern);
+			// 1) Reconstruir la lista de elementos desde el JSON actual
+			FileService.readElementsFromString(text.getText());
+
+			// 2) Reencontrar currentElement por identifier
+			String currentElementId = currentElement.getIdentifier();
+			List<desperados.dvd.elements.Element> elements = FileService.getElements();
+
+			if (elements == null) {
+				return;
 			}
-			
-			if (elementIndex >= 0) {
-				// Encontrar el bloque correspondiente (entre { y })
-				int blockStart = jsonContent.lastIndexOf("{", elementIndex);
-				int blockEnd = jsonContent.indexOf("}", elementIndex);
-				
-				if (blockStart >= 0 && blockEnd > blockStart) {
-					String elementBlock = jsonContent.substring(blockStart, blockEnd + 1);
-					
-					// Extraer valores usando regex simple
-					isRestoringElementInfo = true;
-					
-					// Buscar "x" : número
-					java.util.regex.Pattern xPattern = java.util.regex.Pattern.compile("\"x\"\\s*:\\s*(\\d+)");
-					java.util.regex.Matcher xMatcher = xPattern.matcher(elementBlock);
-					if (xMatcher.find()) {
-						textElementX.setText(xMatcher.group(1));
-					}
-					
-					// Buscar "y" : número
-					java.util.regex.Pattern yPattern = java.util.regex.Pattern.compile("\"y\"\\s*:\\s*(\\d+)");
-					java.util.regex.Matcher yMatcher = yPattern.matcher(elementBlock);
-					if (yMatcher.find()) {
-						textElementY.setText(yMatcher.group(1));
-					}
-					
-					// Buscar "direction" : número
-					java.util.regex.Pattern dirPattern = java.util.regex.Pattern.compile("\"direction\"\\s*:\\s*(\\d+)");
-					java.util.regex.Matcher dirMatcher = dirPattern.matcher(elementBlock);
-					if (dirMatcher.find()) {
-						textElementDirection.setText(dirMatcher.group(1));
-					}
-					
-					isRestoringElementInfo = false;
+
+			desperados.dvd.elements.Element updatedElement = null;
+			for (desperados.dvd.elements.Element elem : elements) {
+				if (elem.getIdentifier().equals(currentElementId)) {
+					updatedElement = elem;
+					break;
 				}
 			}
+
+			if (updatedElement == null) {
+				return;
+			}
+
+			// 3) Reemplazar la referencia vieja por la nueva
+			currentElement = updatedElement;
+			FileService.setSelectedElement(updatedElement);
+
+			// 4) Refrescar todo el panel desde el objeto real actualizado
+			displayElementInfo(updatedElement);
+
 		} catch (Exception e) {
-			// Ignorar errores
+			// Ignorar errores mientras el usuario está escribiendo JSON incompleto
 		}
 	}
 }
