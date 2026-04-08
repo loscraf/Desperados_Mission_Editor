@@ -406,6 +406,37 @@ public class EditorWindow {
 		shell.setText(appName + " " + appVersion);
 		
 		clipboard = new Clipboard(display);
+
+		display.addFilter(SWT.KeyDown, new Listener() {
+			@Override
+			public void handleEvent(Event e) {
+				// Solo si esta ventana/app está activa
+				if (shell == null || shell.isDisposed()) {
+					return;
+				}
+
+				Shell activeShell = display.getActiveShell();
+				if (activeShell != shell) {
+					return;
+				}
+
+				boolean ctrlPressed = (e.stateMask & SWT.CTRL) != 0;
+
+				if (ctrlPressed && (e.keyCode == 'z' || e.keyCode == 'Z')) {
+					undo();
+					e.type = SWT.None;
+					e.doit = false;
+					return;
+				}
+
+				if (ctrlPressed && (e.keyCode == 'y' || e.keyCode == 'Y')) {
+					redo();
+					e.type = SWT.None;
+					e.doit = false;
+					return;
+				}
+			}
+		});
 		
 		// Layout para el shell con el SashForm
 		GridLayout shellLayout = new GridLayout();
