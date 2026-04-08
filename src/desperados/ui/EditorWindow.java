@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.3";
+	private final static String appVersion = "v1.31";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -151,6 +151,17 @@ public class EditorWindow {
 	private int[] textPositions;
 	private int[] unsavedChanges;
 
+	private static class ParsedWayCommand {
+		private final String name;
+		private final String args;
+
+		private ParsedWayCommand(String name, String args) {
+			this.name = name;
+			this.args = args;
+		}
+	}
+
+	// Aquí empiezan los métodos
 	private void initComboItems() {
 		activeComboItem = 0;
 		
@@ -1724,7 +1735,7 @@ public class EditorWindow {
 				return buildSectionHeader(sectionName) + buildElemDiffSummary(savedText, currentText);
 
 			case 1: // WAYS
-				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+				return buildSectionHeader(sectionName) + buildWaysDiffSummary(savedText, currentText);
 
 			case 2: // SCRP
 				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
@@ -1841,6 +1852,746 @@ public class EditorWindow {
 		}
 
 		return sb.toString().trim();
+	}
+
+	private String buildWaysDiffSummary(String oldText, String newText) {
+		java.util.Map<String, String> oldRoutes = splitWaysRoutesByIdentifier(oldText);
+		java.util.Map<String, String> newRoutes = splitWaysRoutesByIdentifier(newText);
+
+		StringBuilder sb = new StringBuilder();
+
+		java.util.Set<String> allIds = new java.util.TreeSet<String>();
+		allIds.addAll(oldRoutes.keySet());
+		allIds.addAll(newRoutes.keySet());
+
+		for (String routeId : allIds) {
+			boolean inOld = oldRoutes.containsKey(routeId);
+			boolean inNew = newRoutes.containsKey(routeId);
+
+			if (!inOld && inNew) {
+				sb.append("- Route added: ").append(routeId).append("\n");
+				continue;
+			}
+
+			if (inOld && !inNew) {
+				sb.append("- Route removed: ").append(routeId).append("\n");
+				continue;
+			}
+
+			String oldRoute = oldRoutes.get(routeId);
+			String newRoute = newRoutes.get(routeId);
+
+			String routeDetails = buildSingleWaysRouteDiff(routeId, oldRoute, newRoute);
+			if (!routeDetails.isEmpty()) {
+				sb.append(routeDetails).append("\n");
+			}
+		}
+
+		if (sb.length() == 0) {
+			return "- No route-level differences detected";
+		}
+
+		return sb.toString().trim();
+	}
+
+	private String buildSingleWaysRouteDiff(String routeId, String oldRoute, String newRoute) {
+		if (oldRoute == null) oldRoute = "";
+		if (newRoute == null) newRoute = "";
+
+		String normalizedOld = normalizeWaysRouteBlock(oldRoute);
+		String normalizedNew = normalizeWaysRouteBlock(newRoute);
+
+		if (normalizedOld.equals(normalizedNew)) {
+			return "";
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("- ").append(routeId).append("\n");
+
+		java.util.List<String> oldWaypoints = extractWaypointBlocks(oldRoute);
+		java.util.List<String> newWaypoints = extractWaypointBlocks(newRoute);
+
+		if (oldWaypoints.size() != newWaypoints.size()) {
+			sb.append("   • waypoint count: ")
+			.append(oldWaypoints.size())
+			.append(" → ")
+			.append(newWaypoints.size())
+			.append("\n");
+		}
+
+		int max = Math.max(oldWaypoints.size(), newWaypoints.size());
+
+		for (int i = 0; i < max; i++) {
+			String oldWp = i < oldWaypoints.size() ? oldWaypoints.get(i) : null;
+			String newWp = i < newWaypoints.size() ? newWaypoints.get(i) : null;
+
+			if (oldWp == null && newWp != null) {
+				sb.append("   • Waypoint #").append(i).append(" added\n");
+				appendIndentedWaypointPreview(sb, newWp, "      ");
+				continue;
+			}
+
+			if (oldWp != null && newWp == null) {
+				sb.append("   • Waypoint #").append(i).append(" removed\n");
+				appendIndentedWaypointPreview(sb, oldWp, "      ");
+				continue;
+			}
+
+			String wpDiff = buildSingleWaypointDiff(i, oldWp, newWp);
+			if (!wpDiff.isEmpty()) {
+				sb.append(wpDiff);
+			}
+		}
+
+		return sb.toString().trim();
+	}
+
+	private String buildSingleWaypointDiff(int waypointIndex, String oldWp, String newWp) {
+		if (oldWp == null) oldWp = "";
+		if (newWp == null) newWp = "";
+
+		String normalizedOld = normalizeWaysRouteBlock(oldWp);
+		String normalizedNew = normalizeWaysRouteBlock(newWp);
+
+		if (normalizedOld.equals(normalizedNew)) {
+			return "";
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("   • Waypoint #").append(waypointIndex).append("\n");
+
+		String oldGoto = extractWaypointGotoPos(oldWp);
+		String newGoto = extractWaypointGotoPos(newWp);
+
+		if (!safeEquals(oldGoto, newGoto)) {
+			sb.append("      - GotoPos: ")
+			.append(formatDiffValue(oldGoto))
+			.append(" → ")
+			.append(formatDiffValue(newGoto))
+			.append("\n");
+		}
+
+		String oldClassname = extractWaypointClassname(oldWp);
+		String newClassname = extractWaypointClassname(newWp);
+
+		if (!safeEquals(oldClassname, newClassname)) {
+			sb.append("      - Classname: ")
+			.append(formatDiffValue(oldClassname))
+			.append(" → ")
+			.append(formatDiffValue(newClassname))
+			.append("\n");
+		}
+
+		String sectionDiff = buildWaypointSectionsDiff(oldWp, newWp);
+		if (!sectionDiff.isEmpty()) {
+			sb.append(sectionDiff);
+		}
+
+		return sb.toString();
+	}
+
+	private String buildWaypointSectionsDiff(String oldWp, String newWp) {
+		java.util.Map<String, String> oldSections = extractTopLevelSections(oldWp);
+		java.util.Map<String, String> newSections = extractTopLevelSections(newWp);
+
+		java.util.Set<String> allSectionKeys = new java.util.TreeSet<String>();
+		allSectionKeys.addAll(oldSections.keySet());
+		allSectionKeys.addAll(newSections.keySet());
+
+		StringBuilder sb = new StringBuilder();
+
+		for (String sectionKey : allSectionKeys) {
+			String oldSection = oldSections.get(sectionKey);
+			String newSection = newSections.get(sectionKey);
+
+			if (oldSection == null && newSection != null) {
+				sb.append("      - Section(").append(sectionKey).append(") added\n");
+				appendIndentedStructuredBlock(sb, newSection, "         ");
+				continue;
+			}
+
+			if (oldSection != null && newSection == null) {
+				sb.append("      - Section(").append(sectionKey).append(") removed\n");
+				appendIndentedStructuredBlock(sb, oldSection, "         ");
+				continue;
+			}
+
+			String subsectionDiff = buildSubsectionDiff(sectionKey, oldSection, newSection);
+			if (!subsectionDiff.isEmpty()) {
+				sb.append(subsectionDiff);
+			}
+		}
+
+		return sb.toString();
+	}
+
+	private String buildSubsectionDiff(String sectionKey, String oldSection, String newSection) {
+		java.util.Map<String, String> oldSubsections = extractSubsections(oldSection);
+		java.util.Map<String, String> newSubsections = extractSubsections(newSection);
+
+		java.util.Set<String> allSubKeys = new java.util.TreeSet<String>();
+		allSubKeys.addAll(oldSubsections.keySet());
+		allSubKeys.addAll(newSubsections.keySet());
+
+		StringBuilder sb = new StringBuilder();
+
+		for (String subKey : allSubKeys) {
+			String oldSub = oldSubsections.get(subKey);
+			String newSub = newSubsections.get(subKey);
+
+			if (oldSub == null && newSub != null) {
+				sb.append("      - Section(").append(sectionKey).append(") / Subsection(").append(subKey).append(") added\n");
+				appendIndentedStructuredBlock(sb, newSub, "         ");
+				continue;
+			}
+
+			if (oldSub != null && newSub == null) {
+				sb.append("      - Section(").append(sectionKey).append(") / Subsection(").append(subKey).append(") removed\n");
+				appendIndentedStructuredBlock(sb, oldSub, "         ");
+				continue;
+			}
+
+			String lineDiff = buildLineLevelDiff(sectionKey, subKey, oldSub, newSub);
+			if (!lineDiff.isEmpty()) {
+				sb.append(lineDiff);
+			}
+		}
+
+		return sb.toString();
+	}
+
+	private String buildLineLevelDiff(String sectionKey, String subKey, String oldSub, String newSub) {
+		java.util.List<String> oldLines = extractMeaningfulInnerLines(oldSub);
+		java.util.List<String> newLines = extractMeaningfulInnerLines(newSub);
+
+		int max = Math.max(oldLines.size(), newLines.size());
+		StringBuilder block = new StringBuilder();
+
+		for (int i = 0; i < max; i++) {
+			String oldLine = i < oldLines.size() ? oldLines.get(i) : null;
+			String newLine = i < newLines.size() ? newLines.get(i) : null;
+
+			if (safeEquals(oldLine, newLine)) {
+				continue;
+			}
+
+			if (block.length() == 0) {
+				block.append("      - Section(")
+					.append(sectionKey)
+					.append(") / Subsection(")
+					.append(subKey)
+					.append(")\n");
+			}
+
+			block.append(buildPrettyCommandDiffLine(i + 1, oldLine, newLine));
+		}
+
+		return block.toString();
+	}
+
+	private String buildPrettyCommandDiffLine(int lineNumber, String oldLine, String newLine) {
+		StringBuilder sb = new StringBuilder();
+
+		if (oldLine == null && newLine != null) {
+			ParsedWayCommand newCmd = parseWayCommand(newLine);
+
+			if (newCmd != null) {
+				sb.append("         • ")
+				.append(newCmd.name)
+				.append(" added: ")
+				.append(formatDiffValue(formatWayCommandArgs(newCmd.args)))
+				.append("\n");
+			} else {
+				sb.append("         • line ")
+				.append(lineNumber)
+				.append(" added: ")
+				.append(formatDiffValue(newLine))
+				.append("\n");
+			}
+
+			return sb.toString();
+		}
+
+		if (oldLine != null && newLine == null) {
+			ParsedWayCommand oldCmd = parseWayCommand(oldLine);
+
+			if (oldCmd != null) {
+				sb.append("         • ")
+				.append(oldCmd.name)
+				.append(" removed: ")
+				.append(formatDiffValue(formatWayCommandArgs(oldCmd.args)))
+				.append("\n");
+			} else {
+				sb.append("         • line ")
+				.append(lineNumber)
+				.append(" removed: ")
+				.append(formatDiffValue(oldLine))
+				.append("\n");
+			}
+
+			return sb.toString();
+		}
+
+		ParsedWayCommand oldCmd = parseWayCommand(oldLine);
+		ParsedWayCommand newCmd = parseWayCommand(newLine);
+
+		if (oldCmd != null && newCmd != null) {
+			if (safeEquals(oldCmd.name, newCmd.name)) {
+				sb.append("         • ")
+				.append(oldCmd.name)
+				.append(": ")
+				.append(formatDiffValue(formatWayCommandArgs(oldCmd.args)))
+				.append(" → ")
+				.append(formatDiffValue(formatWayCommandArgs(newCmd.args)))
+				.append("\n");
+			} else {
+				sb.append("         • command: ")
+				.append(formatDiffValue(oldLine))
+				.append(" → ")
+				.append(formatDiffValue(newLine))
+				.append("\n");
+			}
+		} else {
+			sb.append("         • line ")
+			.append(lineNumber)
+			.append(": ")
+			.append(formatDiffValue(oldLine))
+			.append(" → ")
+			.append(formatDiffValue(newLine))
+			.append("\n");
+		}
+
+		return sb.toString();
+	}
+
+	private ParsedWayCommand parseWayCommand(String line) {
+		if (line == null) {
+			return null;
+		}
+
+		String trimmed = line.trim();
+		if (trimmed.isEmpty()) {
+			return null;
+		}
+
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+			"^([A-Za-z_][A-Za-z0-9_]*)\\s*\\((.*)\\)\\s*;?$"
+		);
+		java.util.regex.Matcher matcher = pattern.matcher(trimmed);
+
+		if (!matcher.matches()) {
+			return null;
+		}
+
+		String name = matcher.group(1).trim();
+		String args = matcher.group(2).trim();
+
+		return new ParsedWayCommand(name, args);
+	}
+
+	private String formatWayCommandArgs(String args) {
+		if (args == null || args.trim().isEmpty()) {
+			return "∅";
+		}
+		return args.trim();
+	}
+
+	private java.util.Map<String, String> extractTopLevelSections(String waypointBlock) {
+		java.util.Map<String, String> result = new java.util.LinkedHashMap<String, String>();
+
+		if (waypointBlock == null || waypointBlock.trim().isEmpty()) {
+			return result;
+		}
+
+		int depth = 0;
+		int index = 0;
+
+		while (index < waypointBlock.length()) {
+			char c = waypointBlock.charAt(index);
+
+			if (c == '{') {
+				depth++;
+				index++;
+				continue;
+			}
+			if (c == '}') {
+				depth--;
+				index++;
+				continue;
+			}
+
+			if (depth == 1 && waypointBlock.startsWith("Section(", index)) {
+				int numStart = index + "Section(".length();
+				int numEnd = waypointBlock.indexOf(")", numStart);
+				if (numEnd < 0) break;
+
+				String sectionId = waypointBlock.substring(numStart, numEnd).trim();
+
+				int openBrace = waypointBlock.indexOf("{", numEnd);
+				if (openBrace < 0) break;
+
+				int closeBrace = findMatchingBrace(waypointBlock, openBrace);
+				if (closeBrace < 0) break;
+
+				String fullBlock = waypointBlock.substring(index, closeBrace + 1).trim();
+				result.put(sectionId, fullBlock);
+
+				index = closeBrace + 1;
+				continue;
+			}
+
+			index++;
+		}
+
+		return result;
+	}
+
+	private java.util.Map<String, String> extractSubsections(String sectionBlock) {
+		java.util.Map<String, String> result = new java.util.LinkedHashMap<String, String>();
+
+		if (sectionBlock == null || sectionBlock.trim().isEmpty()) {
+			return result;
+		}
+
+		int depth = 0;
+		int index = 0;
+
+		while (index < sectionBlock.length()) {
+			char c = sectionBlock.charAt(index);
+
+			if (c == '{') {
+				depth++;
+				index++;
+				continue;
+			}
+			if (c == '}') {
+				depth--;
+				index++;
+				continue;
+			}
+
+			if (depth == 1 && sectionBlock.startsWith("Subsection(", index)) {
+				int numStart = index + "Subsection(".length();
+				int numEnd = sectionBlock.indexOf(")", numStart);
+				if (numEnd < 0) break;
+
+				String subsectionId = sectionBlock.substring(numStart, numEnd).trim();
+
+				int openBrace = sectionBlock.indexOf("{", numEnd);
+				if (openBrace < 0) break;
+
+				int closeBrace = findMatchingBrace(sectionBlock, openBrace);
+				if (closeBrace < 0) break;
+
+				String fullBlock = sectionBlock.substring(index, closeBrace + 1).trim();
+				result.put(subsectionId, fullBlock);
+
+				index = closeBrace + 1;
+				continue;
+			}
+
+			index++;
+		}
+
+		return result;
+	}
+
+	private java.util.List<String> extractMeaningfulInnerLines(String block) {
+		java.util.List<String> lines = new java.util.ArrayList<String>();
+
+		if (block == null || block.trim().isEmpty()) {
+			return lines;
+		}
+
+		String normalized = normalizeWaysRouteBlock(block);
+
+		normalized = normalized.replaceFirst("^[A-Za-z]+\\s*\\([^\\)]*\\)\\s*\\{\\s*", "");
+
+		if (normalized.endsWith("}")) {
+			normalized = normalized.substring(0, normalized.length() - 1).trim();
+		}
+
+		String[] rawLines = normalized.split("\\r?\\n");
+
+		for (String line : rawLines) {
+			String trimmed = line.trim();
+
+			if (trimmed.isEmpty()) continue;
+			if (trimmed.equals("{")) continue;
+			if (trimmed.equals("}")) continue;
+
+			lines.add(trimmed);
+		}
+
+		return lines;
+	}
+
+	private void appendIndentedStructuredBlock(StringBuilder sb, String block, String indent) {
+		if (block == null || block.trim().isEmpty()) {
+			return;
+		}
+
+		java.util.List<String> lines = extractMeaningfulInnerLinesPreserveHeaders(block);
+
+		for (String line : lines) {
+			sb.append(indent).append("• ").append(line).append("\n");
+		}
+	}
+
+	private java.util.List<String> extractMeaningfulInnerLinesPreserveHeaders(String block) {
+		java.util.List<String> lines = new java.util.ArrayList<String>();
+
+		if (block == null || block.trim().isEmpty()) {
+			return lines;
+		}
+
+		String[] rawLines = block.split("\\r?\\n");
+
+		for (String line : rawLines) {
+			String trimmed = line.trim();
+
+			if (trimmed.isEmpty()) continue;
+			if (trimmed.equals("{")) continue;
+			if (trimmed.equals("}")) continue;
+
+			lines.add(trimmed);
+		}
+
+		return lines;
+	}
+
+	private java.util.List<String> extractWaypointBlocks(String routeBlock) {
+		java.util.List<String> waypoints = new java.util.ArrayList<String>();
+
+		if (routeBlock == null || routeBlock.trim().isEmpty()) {
+			return waypoints;
+		}
+
+		int index = 0;
+
+		while (true) {
+			int wpStart = routeBlock.indexOf("Waypoint()", index);
+			if (wpStart < 0) {
+				break;
+			}
+
+			int openBrace = routeBlock.indexOf("{", wpStart);
+			if (openBrace < 0) {
+				break;
+			}
+
+			int closeBrace = findMatchingBrace(routeBlock, openBrace);
+			if (closeBrace < 0) {
+				break;
+			}
+
+			String waypointBlock = routeBlock.substring(wpStart, closeBrace + 1).trim();
+			waypoints.add(waypointBlock);
+
+			index = closeBrace + 1;
+		}
+
+		return waypoints;
+	}
+
+	private String extractWaypointGotoPos(String waypointBlock) {
+		if (waypointBlock == null || waypointBlock.trim().isEmpty()) {
+			return "";
+		}
+
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+			"GotoPos\\s*\\(([^\\)]*)\\)\\s*;"
+		);
+		java.util.regex.Matcher matcher = pattern.matcher(waypointBlock);
+
+		if (matcher.find()) {
+			return matcher.group(1).trim();
+		}
+
+		return "";
+	}
+
+	private String extractWaypointClassname(String waypointBlock) {
+		if (waypointBlock == null || waypointBlock.trim().isEmpty()) {
+			return "";
+		}
+
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+			"Classname\\s*\\(\"([^\"]*)\"\\)\\s*;"
+		);
+		java.util.regex.Matcher matcher = pattern.matcher(waypointBlock);
+
+		if (matcher.find()) {
+			return matcher.group(1).trim();
+		}
+
+		return "";
+	}
+
+	private String normalizeWaypointInnerBody(String waypointBlock) {
+		if (waypointBlock == null) {
+			return "";
+		}
+
+		String normalized = normalizeWaysRouteBlock(waypointBlock);
+
+		normalized = normalized.replaceFirst("^Waypoint\\s*\\(\\)\\s*\\{\\s*", "");
+		normalized = normalized.replaceFirst("^//\\s*\\d+\\s*", "");
+		normalized = normalized.replaceFirst("^GotoPos\\s*\\([^\\)]*\\)\\s*;\\s*", "");
+		normalized = normalized.replaceFirst("^Classname\\s*\\(\"[^\"]*\"\\)\\s*;\\s*", "");
+
+		if (normalized.endsWith("}")) {
+			normalized = normalized.substring(0, normalized.length() - 1).trim();
+		}
+
+		return normalized.trim();
+	}
+
+	private void appendIndentedWaypointPreview(StringBuilder sb, String waypointBlock, String indent) {
+		if (waypointBlock == null || waypointBlock.trim().isEmpty()) {
+			return;
+		}
+
+		String[] lines = waypointBlock.split("\\r?\\n");
+		for (String line : lines) {
+			String trimmed = line.trim();
+			if (!trimmed.isEmpty()) {
+				sb.append(indent).append("- ").append(trimmed).append("\n");
+			}
+		}
+	}
+
+	private boolean safeEquals(String a, String b) {
+		if (a == null) a = "";
+		if (b == null) b = "";
+		return a.trim().equals(b.trim());
+	}
+
+	private int countWaysWaypoints(String routeBlock) {
+		if (routeBlock == null || routeBlock.trim().isEmpty()) {
+			return 0;
+		}
+
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\bWaypoint\\s*\\(\\)");
+		java.util.regex.Matcher matcher = pattern.matcher(routeBlock);
+
+		int count = 0;
+		while (matcher.find()) {
+			count++;
+		}
+
+		return count;
+	}
+
+	private java.util.Map<String, String> splitWaysRoutesByIdentifier(String text) {
+		java.util.Map<String, String> routes = new java.util.LinkedHashMap<String, String>();
+
+		if (text == null || text.trim().isEmpty()) {
+			return routes;
+		}
+
+		int index = 0;
+
+		while (true) {
+			int routeStart = text.indexOf("Route()", index);
+			if (routeStart < 0) {
+				break;
+			}
+
+			int openBrace = text.indexOf("{", routeStart);
+			if (openBrace < 0) {
+				break;
+			}
+
+			int closeBrace = findMatchingBrace(text, openBrace);
+			if (closeBrace < 0) {
+				break;
+			}
+
+			String routeBlock = text.substring(routeStart, closeBrace + 1).trim();
+			String routeId = extractWaysIdentifier(routeBlock);
+
+			if (routeId != null && !routeId.trim().isEmpty()) {
+				routes.put(routeId.trim(), routeBlock);
+			}
+
+			index = closeBrace + 1;
+		}
+
+		return routes;
+	}
+
+	private int findMatchingBrace(String text, int openBraceIndex) {
+		if (text == null || openBraceIndex < 0 || openBraceIndex >= text.length() || text.charAt(openBraceIndex) != '{') {
+			return -1;
+		}
+
+		int depth = 0;
+
+		for (int i = openBraceIndex; i < text.length(); i++) {
+			char c = text.charAt(i);
+
+			if (c == '{') {
+				depth++;
+			} else if (c == '}') {
+				depth--;
+				if (depth == 0) {
+					return i;
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	private String extractWaysIdentifier(String routeBlock) {
+		if (routeBlock == null || routeBlock.trim().isEmpty()) {
+			return null;
+		}
+
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("Identifier\\s*\\(\"([^\"]+)\"\\)");
+		java.util.regex.Matcher matcher = pattern.matcher(routeBlock);
+
+		if (matcher.find()) {
+			return matcher.group(1);
+		}
+
+		return null;
+	}
+
+	private String normalizeWaysRouteBlock(String block) {
+		if (block == null) {
+			return "";
+		}
+
+		String[] lines = block.split("\\r?\\n");
+		StringBuilder sb = new StringBuilder();
+
+		for (String line : lines) {
+			String normalized = line.trim().replaceAll("\\s+", " ");
+			if (!normalized.isEmpty()) {
+				sb.append(normalized).append("\n");
+			}
+		}
+
+		return sb.toString().trim();
+	}
+
+	private String normalizeWaysRouteBody(String routeBlock) {
+		if (routeBlock == null) {
+			return "";
+		}
+
+		String normalized = normalizeWaysRouteBlock(routeBlock);
+
+		normalized = normalized.replaceFirst("^Route\\s*\\(\\)\\s*\\{\\s*", "");
+		normalized = normalized.replaceFirst("^Identifier\\s*\\(\"[^\"]+\"\\);\\s*", "");
+
+		if (normalized.endsWith("}")) {
+			normalized = normalized.substring(0, normalized.length() - 1).trim();
+		}
+
+		return normalized.trim();
 	}
 
 	private String formatDiffValue(String value) {
@@ -2193,8 +2944,6 @@ public class EditorWindow {
 			// Ignorar errores
 		}
 	}
-
-
 
 	private void updateSpritePreview(desperados.dvd.elements.Element elem) {
 		// Limpiar completamente primero
