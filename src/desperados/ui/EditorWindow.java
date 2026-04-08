@@ -4,6 +4,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.*;
@@ -1091,11 +1095,19 @@ public class EditorWindow {
 				}
 
 				int logicalCount = getUnsavedLogicalChangeCount();
+				String changeSummary = buildCurrentChangesSummary();
 
-				MessageBox confirmBox = new MessageBox(shell, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
-				confirmBox.setText("Confirm Write");
-				confirmBox.setMessage("Write current section to file?\n\nUnsaved logical changes detected: " + logicalCount);
-				int result = confirmBox.open();
+				String message = "Write current section to file?\n\n"
+						+ "Unsaved logical changes detected: " + logicalCount;
+
+				if (changeSummary != null && !changeSummary.trim().isEmpty()) {
+					message += "\n\nChanges:\n" + changeSummary;
+				}
+
+				MessageBox msg = new MessageBox(shell, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+				msg.setText("Confirm Write");
+				msg.setMessage(message);
+				int result = msg.open();
 
 				if (result != SWT.YES) {
 					resyncCurrentElementFromCurrentJson();
@@ -1691,6 +1703,123 @@ public class EditorWindow {
 		if (redoButton != null) {
 			redoButton.setEnabled(historyIndex < historyStack.size() - 1);
 		}
+	}
+
+	private String buildCurrentChangesSummary() {
+		if (activeComboItem < 0 || activeComboItem >= comboTexts.length) {
+			return "";
+		}
+
+		String savedText = lastSavedTexts[activeComboItem] != null ? lastSavedTexts[activeComboItem] : "";
+		String currentText = comboTexts[activeComboItem] != null ? comboTexts[activeComboItem] : "";
+
+		if (savedText.equals(currentText)) {
+			return "";
+		}
+
+		if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+			return buildElemDiffSummary(savedText, currentText);
+		}
+
+		// Para otras secciones, por ahora algo simple
+		return "- Text/content modified";
+	}
+
+	private String buildElemDiffSummary(String oldText, String newText) {
+		java.util.Map<String, java.util.Map<String, String>> oldMap = parseElemBlocks(oldText);
+		java.util.Map<String, java.util.Map<String, String>> newMap = parseElemBlocks(newText);
+
+		Set<String> allIds = new LinkedHashSet<>();
+		allIds.addAll(oldMap.keySet());
+		allIds.addAll(newMap.keySet());
+
+		StringBuilder sb = new StringBuilder();
+		int shown = 0;
+		final int LIMIT = 30;
+
+		for (String id : allIds) {
+			java.util.Map<String, String> oldFields = oldMap.get(id);
+			java.util.Map<String, String> newFields = newMap.get(id);
+
+			if (oldFields == null) {
+				sb.append("- ").append(id).append(" → added\n");
+				shown++;
+			} else if (newFields == null) {
+				sb.append("- ").append(id).append(" → removed\n");
+				shown++;
+			} else {
+				Set<String> allFields = new LinkedHashSet<>();
+				allFields.addAll(oldFields.keySet());
+				allFields.addAll(newFields.keySet());
+
+				for (String field : allFields) {
+					String oldVal = oldFields.get(field);
+					String newVal = newFields.get(field);
+
+					if (oldVal == null) oldVal = "";
+					if (newVal == null) newVal = "";
+
+					if (!oldVal.equals(newVal)) {
+						sb.append("- ").append(id).append(" → ").append(field).append("\n");
+						shown++;
+
+						if (shown >= LIMIT) {
+							sb.append("- ...more changes...\n");
+							return sb.toString().trim();
+						}
+					}
+				}
+			}
+
+			if (shown >= LIMIT) {
+				sb.append("- ...more changes...\n");
+				break;
+			}
+		}
+
+		return sb.toString().trim();
+	}
+
+	private java.util.Map<String, java.util.Map<String, String>> parseElemBlocks(String json) {
+		java.util.Map<String, java.util.Map<String, String>> result = new java.util.LinkedHashMap<>();
+
+		if (json == null || json.trim().isEmpty()) {
+			return result;
+		}
+
+		try {
+			Pattern blockPattern = Pattern.compile("\\{(.*?)\\}", Pattern.DOTALL);
+			Matcher blockMatcher = blockPattern.matcher(json);
+
+			while (blockMatcher.find()) {
+				String block = blockMatcher.group();
+
+				Pattern idPattern = Pattern.compile("\"identifier\"\\s*:\\s*\"([^\"]+)\"");
+				Matcher idMatcher = idPattern.matcher(block);
+
+				if (!idMatcher.find()) {
+					continue;
+				}
+
+				String id = idMatcher.group(1);
+				java.util.Map<String, String> fields = new java.util.LinkedHashMap<>();
+
+				Pattern fieldPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(\"[^\"]*\"|\\-?\\d+|true|false|null)");
+				Matcher fieldMatcher = fieldPattern.matcher(block);
+
+				while (fieldMatcher.find()) {
+					String fieldName = fieldMatcher.group(1);
+					String fieldValue = fieldMatcher.group(2);
+					fields.put(fieldName, fieldValue);
+				}
+
+				result.put(id, fields);
+			}
+		} catch (Exception e) {
+			// ignorar
+		}
+
+		return result;
 	}
 
 	private void installGlobalUndoRedoInterceptor(Control control) {
