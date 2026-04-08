@@ -1742,15 +1742,20 @@ public class EditorWindow {
 			java.util.Map<String, String> newFields = newMap.get(id);
 
 			if (oldFields == null) {
-				sb.append("- ").append(id).append(" → added\n");
+				sb.append("- ").append(id).append("\n");
+				sb.append("   • added\n\n");
 				shown++;
 			} else if (newFields == null) {
-				sb.append("- ").append(id).append(" → removed\n");
+				sb.append("- ").append(id).append("\n");
+				sb.append("   • removed\n\n");
 				shown++;
 			} else {
 				Set<String> allFields = new LinkedHashSet<>();
 				allFields.addAll(oldFields.keySet());
 				allFields.addAll(newFields.keySet());
+
+				StringBuilder elementBlock = new StringBuilder();
+				int elementChanges = 0;
 
 				for (String field : allFields) {
 					String oldVal = oldFields.get(field);
@@ -1760,14 +1765,31 @@ public class EditorWindow {
 					if (newVal == null) newVal = "";
 
 					if (!oldVal.equals(newVal)) {
-						sb.append("- ").append(id).append(" → ").append(field).append("\n");
+						if (elementChanges == 0) {
+							elementBlock.append("- ").append(id).append("\n");
+						}
+
+						elementBlock.append("   • ")
+								.append(field)
+								.append(": ")
+								.append(formatDiffValue(oldVal))
+								.append(" → ")
+								.append(formatDiffValue(newVal))
+								.append("\n");
+
+						elementChanges++;
 						shown++;
 
 						if (shown >= LIMIT) {
-							sb.append("- ...more changes...\n");
+							sb.append(elementBlock);
+							sb.append("   • ...more changes...\n");
 							return sb.toString().trim();
 						}
 					}
+				}
+
+				if (elementChanges > 0) {
+					sb.append(elementBlock).append("\n");
 				}
 			}
 
@@ -1778,6 +1800,21 @@ public class EditorWindow {
 		}
 
 		return sb.toString().trim();
+	}
+
+	private String formatDiffValue(String value) {
+		if (value == null || value.trim().isEmpty()) {
+			return "(empty)";
+		}
+
+		String trimmed = value.trim();
+
+		// Si viene con comillas JSON, las quitamos para que se vea más limpio
+		if (trimmed.length() >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+			trimmed = trimmed.substring(1, trimmed.length() - 1);
+		}
+
+		return trimmed;
 	}
 
 	private java.util.Map<String, java.util.Map<String, String>> parseElemBlocks(String json) {
