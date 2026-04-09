@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.32";
+	private final static String appVersion = "v1.33";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -1833,7 +1833,7 @@ public class EditorWindow {
 				return buildSectionHeader(sectionName) + buildWaysDiffSummary(savedText, currentText);
 
 			case 2: // SCRP
-				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+				return buildSectionHeader(sectionName) + buildScrpDiffSummary(savedText, currentText);
 
 			case 3: // BUIL
 				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
@@ -1987,6 +1987,167 @@ public class EditorWindow {
 		}
 
 		return sb.toString().trim();
+	}
+
+	private String buildScrpDiffSummary(String oldText, String newText) {
+		java.util.List<java.util.Map<String, String>> oldLocations = parseScrpLocations(oldText);
+		java.util.List<java.util.Map<String, String>> newLocations = parseScrpLocations(newText);
+
+		StringBuilder sb = new StringBuilder();
+		int max = Math.max(oldLocations.size(), newLocations.size());
+
+		int shown = 0;
+		final int LIMIT = 40;
+
+		for (int i = 0; i < max; i++) {
+			java.util.Map<String, String> oldLoc = i < oldLocations.size() ? oldLocations.get(i) : null;
+			java.util.Map<String, String> newLoc = i < newLocations.size() ? newLocations.get(i) : null;
+
+			if (oldLoc == null && newLoc != null) {
+				sb.append("- Location #").append(i).append("\n");
+				sb.append("   • added\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+				continue;
+			}
+
+			if (oldLoc != null && newLoc == null) {
+				sb.append("- Location #").append(i).append("\n");
+				sb.append("   • removed\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+				continue;
+			}
+
+			String singleDiff = buildSingleScrpLocationDiff(i, oldLoc, newLoc);
+			if (!singleDiff.isEmpty()) {
+				sb.append(singleDiff).append("\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+			}
+		}
+
+		if (sb.length() == 0) {
+			return "- Logical changes detected in SCRP\n";
+		}
+
+		if (shown >= LIMIT && max > LIMIT) {
+			sb.append("... more changes not shown\n");
+		}
+
+		return sb.toString().trim();
+	}
+
+	private String buildSingleScrpLocationDiff(int index, java.util.Map<String, String> oldLoc, java.util.Map<String, String> newLoc) {
+		if (oldLoc == null || newLoc == null) {
+			return "";
+		}
+
+		java.util.Set<String> allFields = new java.util.LinkedHashSet<String>();
+		allFields.addAll(oldLoc.keySet());
+		allFields.addAll(newLoc.keySet());
+
+		StringBuilder block = new StringBuilder();
+		int changes = 0;
+
+		for (String field : allFields) {
+			String oldVal = oldLoc.get(field);
+			String newVal = newLoc.get(field);
+
+			if (oldVal == null) oldVal = "";
+			if (newVal == null) newVal = "";
+
+			if (!oldVal.equals(newVal)) {
+				if (changes == 0) {
+					block.append("- Location #").append(index).append("\n");
+				}
+
+				block.append("   • ")
+					.append(field)
+					.append(": ")
+					.append(formatDiffValue(oldVal))
+					.append(" → ")
+					.append(formatDiffValue(newVal))
+					.append("\n");
+
+				changes++;
+			}
+		}
+
+		return block.toString().trim();
+	}
+
+	private java.util.List<java.util.Map<String, String>> parseScrpLocations(String text) {
+		java.util.List<java.util.Map<String, String>> result = new java.util.ArrayList<java.util.Map<String, String>>();
+
+		if (text == null || text.trim().isEmpty()) {
+			return result;
+		}
+
+		try {
+			com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+			com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(text);
+
+			com.fasterxml.jackson.databind.JsonNode locationsNode = root.get("locations");
+			if (locationsNode == null || !locationsNode.isArray()) {
+				return result;
+			}
+
+			for (com.fasterxml.jackson.databind.JsonNode locNode : locationsNode) {
+				java.util.Map<String, String> fields = new java.util.LinkedHashMap<String, String>();
+
+				// identifier
+				fields.put("identifier", getJsonTextValue(locNode, "identifier"));
+
+				// classname
+				String classname = getJsonTextValue(locNode, "classname");
+				fields.put("classname", classname);
+
+				// unknown1 / unknown2
+				fields.put("unknown1", getJsonTextValue(locNode, "unknown1"));
+				fields.put("unknown2", getJsonTextValue(locNode, "unknown2"));
+
+				// points
+				com.fasterxml.jackson.databind.JsonNode pointsNode = locNode.get("points");
+				if (pointsNode != null && pointsNode.isArray()) {
+					fields.put("points count", String.valueOf(pointsNode.size()));
+
+					for (int i = 0; i < pointsNode.size(); i++) {
+						com.fasterxml.jackson.databind.JsonNode p = pointsNode.get(i);
+
+						String x = getJsonTextValue(p, "x");
+						String y = getJsonTextValue(p, "y");
+
+						fields.put("point[" + i + "]", "(" + x + ", " + y + ")");
+					}
+				} else {
+					fields.put("points count", "0");
+				}
+
+				result.add(fields);
+			}
+		} catch (Exception e) {
+			// fallback silencioso para no romper el guardado
+		}
+
+		return result;
+	}
+
+	private String getJsonTextValue(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
+		if (node == null || fieldName == null) {
+			return "";
+		}
+
+		com.fasterxml.jackson.databind.JsonNode child = node.get(fieldName);
+		if (child == null || child.isNull()) {
+			return "";
+		}
+
+		if (child.isTextual()) {
+			return child.asText();
+		}
+
+		return child.toString();
 	}
 
 	private String buildSingleWaysRouteDiff(String routeId, String oldRoute, String newRoute) {
