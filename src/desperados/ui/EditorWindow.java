@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.33";
+	private final static String appVersion = "v1.34";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -1836,7 +1836,7 @@ public class EditorWindow {
 				return buildSectionHeader(sectionName) + buildScrpDiffSummary(savedText, currentText);
 
 			case 3: // BUIL
-				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+				return buildSectionHeader(sectionName) + buildBuilDiffSummary(savedText, currentText);
 
 			case 4: // SCB
 				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
@@ -2036,6 +2036,330 @@ public class EditorWindow {
 		}
 
 		return sb.toString().trim();
+	}
+
+	private String buildBuilDiffSummary(String oldText, String newText) {
+		java.util.List<String> oldBlocks = extractBuildingBlocks(oldText);
+		java.util.List<String> newBlocks = extractBuildingBlocks(newText);
+
+		StringBuilder sb = new StringBuilder();
+
+		int max = Math.max(oldBlocks.size(), newBlocks.size());
+		int shown = 0;
+		final int LIMIT = 40;
+
+		for (int i = 0; i < max; i++) {
+			String oldB = i < oldBlocks.size() ? oldBlocks.get(i) : null;
+			String newB = i < newBlocks.size() ? newBlocks.get(i) : null;
+
+			if (oldB == null && newB != null) {
+				sb.append("- Building #").append(i).append("\n");
+				sb.append("   • added\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+				continue;
+			}
+
+			if (oldB != null && newB == null) {
+				sb.append("- Building #").append(i).append("\n");
+				sb.append("   • removed\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+				continue;
+			}
+
+			String fineDiff = buildSingleBuildingDiff(i, oldB, newB);
+			if (!fineDiff.isEmpty()) {
+				sb.append(fineDiff).append("\n\n");
+				shown++;
+				if (shown >= LIMIT) break;
+			}
+		}
+
+		if (sb.length() == 0) {
+			return "- No visible structural changes in BUIL\n";
+		}
+
+		if (shown >= LIMIT && max > LIMIT) {
+			sb.append("... more changes not shown\n");
+		}
+
+		return sb.toString().trim();
+	}
+
+	private java.util.List<String> extractBuildingBlocks(String text) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		if (text == null || text.trim().isEmpty()) {
+			return result;
+		}
+
+		String[] lines = text.split("\\r?\\n");
+		StringBuilder current = null;
+
+		for (String line : lines) {
+			if (line.startsWith("Building (")) {
+				if (current != null) {
+					result.add(current.toString().trim());
+				}
+				current = new StringBuilder();
+			}
+
+			if (current != null) {
+				current.append(line).append("\n");
+			}
+		}
+
+		if (current != null) {
+			result.add(current.toString().trim());
+		}
+
+		return result;
+	}
+
+	private String buildSingleBuildingDiff(int index, String oldBlock, String newBlock) {
+		java.util.Map<String, Object> oldB = parseBuilding(oldBlock);
+		java.util.Map<String, Object> newB = parseBuilding(newBlock);
+
+		StringBuilder sb = new StringBuilder();
+		int changes = 0;
+
+		// type
+		String oldType = (String) oldB.get("type");
+		String newType = (String) newB.get("type");
+
+		if (!safeEquals(oldType, newType)) {
+			appendBuildingHeader(sb, index, changes++);
+			sb.append("   • type: ").append(oldType).append(" → ").append(newType).append("\n");
+		}
+
+		// occupants
+		String oldOcc = (String) oldB.get("occupants");
+		String newOcc = (String) newB.get("occupants");
+
+		if (!safeEquals(oldOcc, newOcc)) {
+			appendBuildingHeader(sb, index, changes++);
+			sb.append("   • occupants: ").append(oldOcc).append(" → ").append(newOcc).append("\n");
+		}
+
+		// IDs (ultra fino)
+		java.util.List<String> oldIdBlocks = extractIdBlocks(oldBlock);
+		java.util.List<String> newIdBlocks = extractIdBlocks(newBlock);
+
+		int max = Math.max(oldIdBlocks.size(), newIdBlocks.size());
+
+		for (int i = 0; i < max; i++) {
+			String o = i < oldIdBlocks.size() ? oldIdBlocks.get(i) : null;
+			String n = i < newIdBlocks.size() ? newIdBlocks.get(i) : null;
+
+			if (o == null && n != null) {
+				appendBuildingHeader(sb, index, changes++);
+				sb.append("   • ").append(extractIdLabel(n)).append(" added\n");
+				continue;
+			}
+
+			if (o != null && n == null) {
+				appendBuildingHeader(sb, index, changes++);
+				sb.append("   • ").append(extractIdLabel(o)).append(" removed\n");
+				continue;
+			}
+
+			String idDiff = buildSingleIdDiff(o, n);
+			if (!idDiff.isEmpty()) {
+				appendBuildingHeader(sb, index, changes++);
+				sb.append(idDiff);
+			}
+		}
+
+		return sb.toString().trim();
+	}
+
+	private java.util.List<String> extractIdBlocks(String buildingBlock) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		if (buildingBlock == null) return result;
+
+		String[] lines = buildingBlock.split("\\r?\\n");
+		StringBuilder current = null;
+
+		for (String line : lines) {
+			if (line.startsWith("ID:")) {
+				if (current != null) {
+					result.add(current.toString().trim());
+				}
+				current = new StringBuilder();
+			}
+
+			if (current != null) {
+				current.append(line).append("\n");
+			}
+		}
+
+		if (current != null) {
+			result.add(current.toString().trim());
+		}
+
+		return result;
+	}
+
+	private String extractIdLabel(String block) {
+		if (block == null) return "ID";
+
+		String firstLine = block.split("\\r?\\n")[0]; // ID: x,y
+		return firstLine.replace("ID:", "ID").trim();
+	}
+
+	private String buildSingleIdDiff(String oldBlock, String newBlock) {
+		StringBuilder sb = new StringBuilder();
+
+		String label = extractIdLabel(oldBlock);
+
+		java.util.List<String> oldLines = java.util.Arrays.asList(oldBlock.split("\\r?\\n"));
+		java.util.List<String> newLines = java.util.Arrays.asList(newBlock.split("\\r?\\n"));
+
+		// FLAGS (línea después de "Door:")
+		String oldFlags = extractAfter(oldLines, "Door:");
+		String newFlags = extractAfter(newLines, "Door:");
+
+		if (!safeEquals(oldFlags, newFlags)) {
+			sb.append("   • ").append(label).append("\n");
+			sb.append("      - Door flags: ").append(oldFlags).append(" → ").append(newFlags).append("\n");
+		}
+
+		// RECT (4 líneas después de flags)
+		java.util.List<String> oldRect = extractBlockAfter(oldLines, oldFlags, 4);
+		java.util.List<String> newRect = extractBlockAfter(newLines, newFlags, 4);
+
+		int maxRect = Math.max(oldRect.size(), newRect.size());
+
+		for (int i = 0; i < maxRect; i++) {
+			String o = i < oldRect.size() ? oldRect.get(i) : null;
+			String n = i < newRect.size() ? newRect.get(i) : null;
+
+			if (!safeEquals(o, n)) {
+				if (sb.length() == 0) {
+					sb.append("   • ").append(label).append("\n");
+				}
+				sb.append("      - rect[").append(i).append("]: ")
+				.append(formatDiffValue(o)).append(" → ")
+				.append(formatDiffValue(n)).append("\n");
+			}
+		}
+
+		// SLOTS (líneas restantes)
+		java.util.List<String> oldSlots = extractRemaining(oldLines, oldFlags, 5);
+		java.util.List<String> newSlots = extractRemaining(newLines, newFlags, 5);
+
+		int maxSlots = Math.max(oldSlots.size(), newSlots.size());
+
+		for (int i = 0; i < maxSlots; i++) {
+			String o = i < oldSlots.size() ? oldSlots.get(i) : null;
+			String n = i < newSlots.size() ? newSlots.get(i) : null;
+
+			if (!safeEquals(o, n)) {
+				if (sb.length() == 0) {
+					sb.append("   • ").append(label).append("\n");
+				}
+				sb.append("      - slot[").append(i).append("]: ")
+				.append(formatDiffValue(o)).append(" → ")
+				.append(formatDiffValue(n)).append("\n");
+			}
+		}
+
+		return sb.toString();
+	}
+
+	private String extractAfter(java.util.List<String> lines, String marker) {
+		for (int i = 0; i < lines.size() - 1; i++) {
+			if (lines.get(i).trim().equals(marker)) {
+				return lines.get(i + 1).trim();
+			}
+		}
+		return "";
+	}
+
+	private java.util.List<String> extractBlockAfter(java.util.List<String> lines, String anchor, int count) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		for (int i = 0; i < lines.size(); i++) {
+			if (lines.get(i).trim().equals(anchor)) {
+				for (int j = 1; j <= count && i + j < lines.size(); j++) {
+					result.add(lines.get(i + j).trim());
+				}
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	private java.util.List<String> extractRemaining(java.util.List<String> lines, String anchor, int skip) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		for (int i = 0; i < lines.size(); i++) {
+			if (lines.get(i).trim().equals(anchor)) {
+				for (int j = skip; i + j < lines.size(); j++) {
+					String l = lines.get(i + j).trim();
+					if (!l.isEmpty()) {
+						result.add(l);
+					}
+				}
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	private java.util.Map<String, Object> parseBuilding(String block) {
+		java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+
+		if (block == null) return result;
+
+		String[] lines = block.split("\\r?\\n");
+
+		// Header
+		if (lines.length > 0) {
+			String header = lines[0]; // Building (@xxxx): 5, 0
+			result.put("header", header);
+
+			int colon = header.indexOf(":");
+			if (colon >= 0) {
+				String[] parts = header.substring(colon + 1).split(",");
+				if (parts.length >= 2) {
+					result.put("type", parts[0].trim());
+					result.put("unk", parts[1].trim());
+				}
+			}
+		}
+
+		// occupants
+		for (String line : lines) {
+			if (line.contains("occupants")) {
+				result.put("occupants", line.trim());
+				break;
+			}
+		}
+
+		// IDs
+		java.util.List<String> ids = new java.util.ArrayList<>();
+		for (String line : lines) {
+			if (line.startsWith("ID:")) {
+				ids.add(line.substring(3).trim());
+			}
+		}
+		result.put("ids", ids);
+
+		// store full block for fallback
+		result.put("raw", block.trim());
+
+		return result;
+	}
+
+	private void appendBuildingHeader(StringBuilder sb, int index, int changes) {
+		if (changes == 0) {
+			sb.append("- Building #").append(index).append("\n");
+		}
 	}
 
 	private String buildSingleScrpLocationDiff(int index, java.util.Map<String, String> oldLoc, java.util.Map<String, String> newLoc) {
