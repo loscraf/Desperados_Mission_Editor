@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.31";
+	private final static String appVersion = "v1.32";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -1115,10 +1115,12 @@ public class EditorWindow {
 					message += "\n\nChanges:\n" + changeSummary;
 				}
 
-				MessageBox msg = new MessageBox(shell, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
-				msg.setText("Confirm Write");
-				msg.setMessage(message);
-				int result = msg.open();
+				int result = openScrollableConfirmWriteDialog(
+					"Confirm Write",
+					"Write current section to file?",
+					logicalCount,
+					changeSummary
+				);
 
 				if (result != SWT.YES) {
 					resyncCurrentElementFromCurrentJson();
@@ -1145,6 +1147,99 @@ public class EditorWindow {
 	    // Establecer tamaño y posición del shell
 	    shell.setSize(1400, 900);
 	    shell.setLocation(100, 100);
+	}
+	private int openScrollableConfirmWriteDialog(String title, String question, int logicalCount, String changeSummary) {
+		final int[] result = new int[] { SWT.CANCEL };
+
+		Shell dialog = new Shell(shell, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL | SWT.RESIZE);
+		dialog.setText(title);
+		dialog.setLayout(new GridLayout(1, false));
+
+		// Pregunta principal
+		Label questionLabel = new Label(dialog, SWT.WRAP);
+		questionLabel.setText(question != null ? question : "");
+		questionLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+		// Conteo
+		Label countLabel = new Label(dialog, SWT.WRAP);
+		countLabel.setText("Unsaved logical changes detected: " + logicalCount);
+		countLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+		// Título del resumen
+		if (changeSummary != null && !changeSummary.trim().isEmpty()) {
+			Label changesLabel = new Label(dialog, SWT.NONE);
+			changesLabel.setText("Changes:");
+			changesLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+			Text changesTextArea = new Text(dialog, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.READ_ONLY | SWT.WRAP);
+			changesTextArea.setText(changeSummary);
+			changesTextArea.setEditable(false);
+
+			GridData changesGd = new GridData(SWT.FILL, SWT.FILL, true, true);
+			changesGd.widthHint = 560;
+			changesGd.heightHint = 280;
+			changesTextArea.setLayoutData(changesGd);
+
+			changesTextArea.setTopIndex(0);
+		}
+
+		// Barra de botones
+		Composite buttonBar = new Composite(dialog, SWT.NONE);
+		buttonBar.setLayoutData(new GridData(SWT.END, SWT.CENTER, true, false));
+
+		GridLayout buttonLayout = new GridLayout(2, true);
+		buttonLayout.marginWidth = 0;
+		buttonLayout.marginHeight = 0;
+		buttonLayout.horizontalSpacing = 10;
+		buttonBar.setLayout(buttonLayout);
+
+		Button yesButton = new Button(buttonBar, SWT.PUSH);
+		yesButton.setText("Yes");
+		yesButton.setLayoutData(new GridData(100, SWT.DEFAULT));
+
+		Button noButton = new Button(buttonBar, SWT.PUSH);
+		noButton.setText("No");
+		noButton.setLayoutData(new GridData(100, SWT.DEFAULT));
+
+		yesButton.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				result[0] = SWT.YES;
+				dialog.close();
+			}
+		});
+
+		noButton.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				result[0] = SWT.NO;
+				dialog.close();
+			}
+		});
+
+		dialog.addListener(SWT.Close, e -> {
+			if (result[0] != SWT.YES && result[0] != SWT.NO) {
+				result[0] = SWT.NO;
+			}
+		});
+
+		dialog.setDefaultButton(yesButton);
+		dialog.setSize(620, 480);
+		dialog.setLocation(
+			shell.getLocation().x + (shell.getSize().x - 620) / 2,
+			shell.getLocation().y + (shell.getSize().y - 480) / 2
+		);
+
+		dialog.open();
+
+		Display display = shell.getDisplay();
+		while (!dialog.isDisposed()) {
+			if (!display.readAndDispatch()) {
+				display.sleep();
+			}
+		}
+
+		return result[0];
 	}
 
 	private String getCurrentSectionKey() {
