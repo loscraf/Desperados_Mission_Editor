@@ -13,6 +13,9 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.*;
 import org.eclipse.swt.dnd.Clipboard;
 import org.eclipse.swt.dnd.DND;
+import org.eclipse.swt.dnd.DragSource;
+import org.eclipse.swt.dnd.DragSourceAdapter;
+import org.eclipse.swt.dnd.DragSourceEvent;
 import org.eclipse.swt.dnd.DropTarget;
 import org.eclipse.swt.dnd.DropTargetAdapter;
 import org.eclipse.swt.dnd.DropTargetEvent;
@@ -32,6 +35,7 @@ import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.*;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.*;
@@ -51,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.38";
+	private final static String appVersion = "v1.39";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -506,6 +510,47 @@ public class EditorWindow {
 	    updateThread.start();
 		
 		canvas = new Canvas(sc, SWT.DOUBLE_BUFFERED);
+
+		DropTarget canvasDropTarget = new DropTarget(canvas, DND.DROP_COPY | DND.DROP_MOVE);
+		canvasDropTarget.setTransfer(new Transfer[] { TextTransfer.getInstance() });
+
+		canvasDropTarget.addDropListener(new DropTargetAdapter() {
+
+		@Override
+		public void dragEnter(DropTargetEvent event) {
+			if (event.currentDataType == null) return;
+
+			if (TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
+				event.detail = DND.DROP_COPY; // 🔥 SIN ESTO → 🚫
+			}
+		}
+
+		@Override
+		public void dragOver(DropTargetEvent event) {
+			event.feedback = DND.FEEDBACK_SELECT | DND.FEEDBACK_SCROLL;
+		}
+
+		@Override
+		public void drop(DropTargetEvent event) {
+			if (!TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
+				return;
+			}
+
+			String data = (String) event.data;
+
+			if ("NEW_ENEMY_NPC".equals(data)) {
+				int x = event.x;
+				int y = event.y;
+
+				Point p = canvas.toControl(x, y);
+
+				addEnemyNpcAt(p.x, p.y);
+
+				String newId = "Element_" + (findNextElementId(comboTexts[ScriptItems.ELEM.ordinal()]) - 1);
+				selectNewElementFromJson(newId);
+			}
+		}
+	});
 		
 		canvas.addListener(SWT.MouseUp, new Listener() {
 			public void handleEvent(Event e) {
@@ -1141,6 +1186,17 @@ public class EditorWindow {
 		spriteImageLabelData.horizontalSpan = 2;
 		spriteLabel.setLayoutData(spriteImageLabelData);
 		spriteLabel.setText("Sprite Preview");
+
+		DragSource dragSource = new DragSource(spriteLabel, DND.DROP_COPY);
+		dragSource.setTransfer(new Transfer[] { TextTransfer.getInstance() });
+		dragSource.addDragListener(new DragSourceAdapter() {
+			@Override
+			public void dragSetData(DragSourceEvent event) {
+				if (TextTransfer.getInstance().isSupportedType(event.dataType)) {
+					event.data = "NEW_ENEMY_NPC";
+				}
+			}
+		});
 		
 		Composite navComposite = new Composite(coordsComposite, SWT.NONE);
 		GridLayout navLayout = new GridLayout();
@@ -1321,6 +1377,18 @@ public class EditorWindow {
 		}
 
 		return result[0];
+	}
+
+	private int findLastElementId() {
+		String text = comboTexts[ScriptItems.ELEM.ordinal()];
+		Matcher m = Pattern.compile("Element_(\\d+)").matcher(text);
+
+		int max = -1;
+		while (m.find()) {
+			int id = Integer.parseInt(m.group(1));
+			if (id > max) max = id;
+		}
+		return max;
 	}
 
 	private String getCurrentSectionKey() {
@@ -3596,7 +3664,7 @@ public class EditorWindow {
 		Menu menu = new Menu(shell, SWT.POP_UP);
 
 		MenuItem addEnemy = new MenuItem(menu, SWT.NONE);
-		addEnemy.setText("Add Enemy NPC");
+		addEnemy.setText("Add Enemy NPC (quick, generic, always Desperado4)");
 
 		addEnemy.addListener(SWT.Selection, e -> {
 			addEnemyNpcAt(x, y);

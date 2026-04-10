@@ -3,6 +3,8 @@
 # Project exclude paths
 /classes/
 
+.vscode/bookmarks.json
+
 .gradle/8.7/executionHistory/executionHistory.bin
 .gradle/8.7/executionHistory/executionHistory.lock
 .gradle/8.7/fileHashes/fileHashes.bin
