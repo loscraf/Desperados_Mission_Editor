@@ -46,12 +46,12 @@ import desperados.exception.ServiceException;
 import desperados.scb.ScbParser;
 
 public class EditorWindow {
-
+	// Variables
 	public static String gameDir;
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.37";
+	private final static String appVersion = "v1.38";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -139,7 +139,6 @@ public class EditorWindow {
 
 	private String[] lastSavedTexts;
 
-	// cambios lógicos pendientes (ej: ELEM:x:guard_1)
 	private java.util.LinkedHashSet<String> pendingLogicalChanges = new java.util.LinkedHashSet<>();
 
 	// valor inicial al entrar en edición de un campo del panel rojo
@@ -162,18 +161,24 @@ public class EditorWindow {
 	}
 
 	private static class ScbDiffEntry {
-	int lineNumber;
-	String text;
-	String className;
-	String functionName;
+		int lineNumber;
+		String text;
+		String className;
+		String functionName;
 
-	ScbDiffEntry(int lineNumber, String text, String className, String functionName) {
-		this.lineNumber = lineNumber;
-		this.text = text;
-		this.className = className;
-		this.functionName = functionName;
+		ScbDiffEntry(int lineNumber, String text, String className, String functionName) {
+			this.lineNumber = lineNumber;
+			this.text = text;
+			this.className = className;
+			this.functionName = functionName;
+		}
 	}
-}
+
+	// Drag and drop de elementos directamente desde el mapa
+	private boolean isDraggingElement = false;
+	private desperados.dvd.elements.Element draggedElement = null;
+	private int dragOffsetX;
+	private int dragOffsetY;
 
 	// Aquí empiezan los métodos
 	private void initComboItems() {
@@ -504,6 +509,20 @@ public class EditorWindow {
 		
 		canvas.addListener(SWT.MouseUp, new Listener() {
 			public void handleEvent(Event e) {
+				// Terminar drag si estaba activo
+				if (isDraggingElement) {
+					isDraggingElement = false;
+
+					regenerateJSON();
+
+					// Guarda el cambio para poder hacer undo/redo del movimiento del elemento
+					text.notifyListeners(SWT.Modify, new Event());
+
+					// Actualiza panel + sprite
+					displayElementInfo(draggedElement);
+
+					return; // Evitar click normal
+				}
 
 				String coordText = (e.x) + "," + (e.y);
 				textCoords.setText(coordText);
@@ -521,6 +540,46 @@ public class EditorWindow {
 					openMapContextMenu(e.x, e.y);
 				}
 			}
+		});
+		
+		canvas.addListener(SWT.MouseDown, e -> {
+			if (!(drawElements || drawAnimations)) return;
+
+			boolean clicked = detectClickedElement(e.x, e.y);
+
+			if (clicked && currentElement != null) {
+				isDraggingElement = true;
+				draggedElement = currentElement;
+
+				int originX = scrolledCanvas.getOrigin().x;
+				int originY = scrolledCanvas.getOrigin().y;
+
+				int mouseX = e.x + originX;
+				int mouseY = e.y + originY;
+
+				dragOffsetX = mouseX - currentElement.getX();
+				dragOffsetY = mouseY - currentElement.getY();
+
+				System.out.println("DRAG START ✔");
+			}
+		});
+		
+		canvas.addListener(SWT.MouseMove, e -> {
+			if (!isDraggingElement || draggedElement == null) return;
+
+			int originX = scrolledCanvas.getOrigin().x;
+			int originY = scrolledCanvas.getOrigin().y;
+
+			int mouseX = e.x + originX;
+			int mouseY = e.y + originY;
+
+			int newX = Math.max(0, Math.min(32767, mouseX - dragOffsetX));
+			int newY = Math.max(0, Math.min(32767, mouseY - dragOffsetY));
+
+			draggedElement.setX((short)newX);
+			draggedElement.setY((short)newY);
+
+			canvas.redraw();
 		});
 		
 		canvas.addKeyListener(new KeyListener() {
