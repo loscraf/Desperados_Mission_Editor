@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.39";
+	private final static String appVersion = "v1.40";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -515,42 +515,37 @@ public class EditorWindow {
 		canvasDropTarget.setTransfer(new Transfer[] { TextTransfer.getInstance() });
 
 		canvasDropTarget.addDropListener(new DropTargetAdapter() {
+			@Override
+			public void dragEnter(DropTargetEvent event) {
+				if (event.currentDataType == null) return;
 
-		@Override
-		public void dragEnter(DropTargetEvent event) {
-			if (event.currentDataType == null) return;
-
-			if (TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
-				event.detail = DND.DROP_COPY; // 🔥 SIN ESTO → 🚫
-			}
-		}
-
-		@Override
-		public void dragOver(DropTargetEvent event) {
-			event.feedback = DND.FEEDBACK_SELECT | DND.FEEDBACK_SCROLL;
-		}
-
-		@Override
-		public void drop(DropTargetEvent event) {
-			if (!TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
-				return;
+				if (TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
+					event.detail = DND.DROP_COPY; // 🔥 SIN ESTO → 🚫
+				}
 			}
 
-			String data = (String) event.data;
-
-			if ("NEW_ENEMY_NPC".equals(data)) {
-				int x = event.x;
-				int y = event.y;
-
-				Point p = canvas.toControl(x, y);
-
-				addEnemyNpcAt(p.x, p.y);
-
-				String newId = "Element_" + (findNextElementId(comboTexts[ScriptItems.ELEM.ordinal()]) - 1);
-				selectNewElementFromJson(newId);
+			@Override
+			public void dragOver(DropTargetEvent event) {
+				event.feedback = DND.FEEDBACK_SELECT | DND.FEEDBACK_SCROLL;
 			}
-		}
-	});
+
+			@Override
+			public void drop(DropTargetEvent event) {
+				if (!TextTransfer.getInstance().isSupportedType(event.currentDataType)) {
+					return;
+				}
+
+				String data = (String) event.data;
+
+				if (data != null) {
+					String sourceId = data.toString();
+
+					Point p = canvas.toControl(event.x, event.y);
+
+					cloneElementAt(sourceId, p.x, p.y);
+				}
+			}
+		});
 		
 		canvas.addListener(SWT.MouseUp, new Listener() {
 			public void handleEvent(Event e) {
@@ -1193,7 +1188,7 @@ public class EditorWindow {
 			@Override
 			public void dragSetData(DragSourceEvent event) {
 				if (TextTransfer.getInstance().isSupportedType(event.dataType)) {
-					event.data = "NEW_ENEMY_NPC";
+					event.data = currentElement != null ? currentElement.getIdentifier() : null;
 				}
 			}
 		});
@@ -1377,6 +1372,45 @@ public class EditorWindow {
 		}
 
 		return result[0];
+	}
+
+	private void cloneElementAt(String sourceId, int x, int y) {
+		String currentText = comboTexts[ScriptItems.ELEM.ordinal()];
+		if (currentText == null || currentText.isEmpty()) return;
+
+		// 🔍 buscar bloque JSON del elemento original
+		String sourceBlock = extractElementBlock(currentText, sourceId);
+		if (sourceBlock == null) return;
+
+		// 🆕 nuevo ID
+		int newId = findNextElementId(currentText);
+		String newIdentifier = "Element_" + newId;
+
+		// ✏️ reemplazar identifier + posición
+		String newBlock = sourceBlock
+			.replaceFirst("\"identifier\"\\s*:\\s*\"" + Pattern.quote(sourceId) + "\"",
+						"\"identifier\" : \"" + newIdentifier + "\"")
+			.replaceAll("\"x\"\\s*:\\s*\\d+", "\"x\" : " + x)
+			.replaceAll("\"y\"\\s*:\\s*\\d+", "\"y\" : " + y);
+
+		// ➕ insertar en JSON
+		String updated = insertAtEndOfElemArray(currentText, newBlock);
+
+		setComboText(ScriptItems.ELEM.ordinal(), updated);
+
+		// 🔥 seleccionar automáticamente
+		selectNewElementFromJson(newIdentifier);
+	}
+
+	private String extractElementBlock(String text, String identifier) {
+		Pattern p = Pattern.compile("\\{[^\\{\\}]*\"identifier\"\\s*:\\s*\"" 
+			+ Pattern.quote(identifier) + "\"[^\\{\\}]*\\}");
+		
+		Matcher m = p.matcher(text);
+		if (m.find()) {
+			return m.group();
+		}
+		return null;
 	}
 
 	private int findLastElementId() {
