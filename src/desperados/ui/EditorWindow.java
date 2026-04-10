@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.36";
+	private final static String appVersion = "v1.37";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -3552,10 +3552,38 @@ public class EditorWindow {
 		if (currentText == null || currentText.isEmpty()) return;
 
 		int nextId = findNextElementId(currentText);
+
 		String newNpc = buildEnemyNpcJson(nextId, x, y);
 		String updated = insertAtEndOfElemArray(currentText, newNpc);
 
 		setComboText(ScriptItems.ELEM.ordinal(), updated);
+
+		String newIdentifier = "Element_" + nextId;
+
+		// Refrescar la vista del elemento recién agregado y seleccionarlo
+		selectNewElementFromJson(newIdentifier);
+	}
+
+	private void selectNewElementFromJson(String identifier) {
+		try {
+			// 🔥 recargar elementos desde JSON actual
+			List<desperados.dvd.elements.Element> elements = FileService.getElements();
+
+			for (desperados.dvd.elements.Element elem : elements) {
+				if (identifier.equals(elem.getIdentifier())) {
+
+					// guardar como actual
+					currentElement = elem;
+
+					displayElementInfo(elem);
+					navigateToElement(elem);
+
+					return;
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	private int findNextElementId(String text) {
