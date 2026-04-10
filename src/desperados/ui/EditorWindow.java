@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.35";
+	private final static String appVersion = "v1.36";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -502,18 +502,26 @@ public class EditorWindow {
 		
 		canvas = new Canvas(sc, SWT.DOUBLE_BUFFERED);
 		
-		canvas.addListener(SWT.MouseUp, new Listener(){
-	        public void handleEvent(Event e){
-	        	String coordText = (e.x) + "," + (e.y);
-	        	textCoords.setText(coordText);
-	        	copyToClipboard(coordText);
-	        	
-	        	// Detectar si hizo click en algún elemento
-	        	if (drawElements || drawAnimations) {
-	        		detectClickedElement(e.x, e.y);
-	        	}
-	        }
-	    });
+		canvas.addListener(SWT.MouseUp, new Listener() {
+			public void handleEvent(Event e) {
+
+				String coordText = (e.x) + "," + (e.y);
+				textCoords.setText(coordText);
+				copyToClipboard(coordText);
+
+				boolean clickedElement = false;
+
+				// Detectar si hizo click en algún elemento
+				if (drawElements || drawAnimations) {
+					clickedElement = detectClickedElement(e.x, e.y);
+				}
+
+				// 👉 CLICK DERECHO en vacío
+				if (e.button == 3 && !clickedElement) {
+					openMapContextMenu(e.x, e.y);
+				}
+			}
+		});
 		
 		canvas.addKeyListener(new KeyListener() {
 			@Override
@@ -3476,10 +3484,10 @@ public class EditorWindow {
 		});
 	}
 
-	private void detectClickedElement(int clickX, int clickY) {
+	private boolean detectClickedElement(int clickX, int clickY) {
 		List<desperados.dvd.elements.Element> elements = FileService.getElements();
 		if (elements == null || elements.isEmpty()) {
-			return;
+			return true;
 		}
 		
 		// Rango de detección (radio del círculo es 12, así que 24 total)
@@ -3502,7 +3510,7 @@ public class EditorWindow {
 				updateNavigationButtons();
 				navigateToElement(elem);
 				canvas.redraw();
-				return;
+				return true;
 			}
 		}
 		
@@ -3522,6 +3530,106 @@ public class EditorWindow {
 		isRestoringElementInfo = false;
 		updateNavigationButtons();
 		canvas.redraw();
+		return false;
+	}
+
+	private void openMapContextMenu(int x, int y) {
+		Menu menu = new Menu(shell, SWT.POP_UP);
+
+		MenuItem addEnemy = new MenuItem(menu, SWT.NONE);
+		addEnemy.setText("Add Enemy NPC");
+
+		addEnemy.addListener(SWT.Selection, e -> {
+			addEnemyNpcAt(x, y);
+		});
+
+		menu.setLocation(Display.getCurrent().getCursorLocation());
+		menu.setVisible(true);
+	}
+
+	private void addEnemyNpcAt(int x, int y) {
+		String currentText = comboTexts[ScriptItems.ELEM.ordinal()];
+		if (currentText == null || currentText.isEmpty()) return;
+
+		int nextId = findNextElementId(currentText);
+		String newNpc = buildEnemyNpcJson(nextId, x, y);
+		String updated = insertAtEndOfElemArray(currentText, newNpc);
+
+		setComboText(ScriptItems.ELEM.ordinal(), updated);
+	}
+
+	private int findNextElementId(String text) {
+		int max = -1;
+
+		java.util.regex.Matcher m = java.util.regex.Pattern
+			.compile("\"identifier\"\\s*:\\s*\"Element_(\\d+)\"")
+			.matcher(text);
+
+		while (m.find()) {
+			int val = Integer.parseInt(m.group(1));
+			if (val > max) max = val;
+		}
+
+		return max + 1;
+	}
+
+	private String buildEnemyNpcJson(int id, int x, int y) {
+		return "  {\n" +
+			"    \"type\" : \"NPC\",\n" +
+			"    \"subtype\" : \"ENEMY\",\n" +
+			"    \"identifier\" : \"Element_" + id + "\",\n" +
+			"    \"dvf\" : \"Desperado4\",\n" +
+			"    \"sprite\" : \"Desperado 04\",\n" +
+			"    \"p00\" : 0,\n" +
+			"    \"p01\" : 64,\n" +
+			"    \"p02\" : 68,\n" +
+			"    \"p03\" : 76,\n" +
+			"    \"p04\" : 74,\n" +
+			"    \"p10\" : 1,\n" +
+			"    \"p11\" : 59,\n" +
+			"    \"p12\" : 65,\n" +
+			"    \"p13\" : 81,\n" +
+			"    \"p14\" : 77,\n" +
+			"    \"x\" : " + x + ",\n" +
+			"    \"y\" : " + y + ",\n" +
+			"    \"u1\" : 0,\n" +
+			"    \"u2\" : 0,\n" +
+			"    \"u3\" : 0,\n" +
+			"    \"u4\" : 0,\n" +
+			"    \"direction\" : 13,\n" +
+			"    \"className\" : \"\",\n" +
+			"    \"stance\" : \"STANDING\",\n" +
+			"    \"character\" : \"DESPERADO4\",\n" +
+			"    \"tiredness\" : 0,\n" +
+			"    \"attitude\" : \"HOSTILE\",\n" +
+			"    \"drunkLevel\" : 0,\n" +
+			"    \"route\" : \"\"\n" +
+			"  }";
+	}
+
+	private String insertAtEndOfElemArray(String text, String newEntry) {
+		int idx = text.lastIndexOf("]");
+		if (idx == -1) return text;
+
+		// Ver si ya hay elementos
+		boolean hasElements = text.contains("}, {");
+
+		String insert = hasElements ? ",\n" + newEntry : "\n" + newEntry + "\n";
+
+		return text.substring(0, idx) + insert + "\n" + text.substring(idx);
+	}
+
+	private void setComboText(int index, String newText) {
+		if (index < 0 || index >= comboTexts.length) return;
+
+		comboTexts[index] = newText;
+
+		// ESTE es tu editor real
+		if (activeComboItem == index && text != null && !text.isDisposed()) {
+			text.setText(newText);
+		}
+
+		markCurrentSectionAsChanged();
 	}
 
 	private void displayElementInfo(desperados.dvd.elements.Element elem) {
