@@ -51,7 +51,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.34";
+	private final static String appVersion = "v1.35";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -160,6 +160,20 @@ public class EditorWindow {
 			this.args = args;
 		}
 	}
+
+	private static class ScbDiffEntry {
+	int lineNumber;
+	String text;
+	String className;
+	String functionName;
+
+	ScbDiffEntry(int lineNumber, String text, String className, String functionName) {
+		this.lineNumber = lineNumber;
+		this.text = text;
+		this.className = className;
+		this.functionName = functionName;
+	}
+}
 
 	// Aquí empiezan los métodos
 	private void initComboItems() {
@@ -1839,7 +1853,7 @@ public class EditorWindow {
 				return buildSectionHeader(sectionName) + buildBuilDiffSummary(savedText, currentText);
 
 			case 4: // SCB
-				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
+				return buildSectionHeader(sectionName) + buildScbDiffSummary(savedText, currentText);
 
 			default:
 				return buildSectionHeader(sectionName) + buildGenericLogicalSummary(savedText, currentText);
@@ -1851,8 +1865,8 @@ public class EditorWindow {
 			case 0: return "ELEM";
 			case 1: return "WAYS";
 			case 2: return "SCRP";
-			case 3: return "SCB";
-			case 4: return "BUIL";
+			case 3: return "BUIL";
+			case 4: return "SCB";
 			default: return "UNKNOWN";
 		}
 	}
@@ -2085,6 +2099,222 @@ public class EditorWindow {
 		}
 
 		return sb.toString().trim();
+	}
+
+	private String buildScbDiffSummary(String oldText, String newText) {
+		java.util.List<String> oldLines = splitLines(oldText);
+		java.util.List<String> newLines = splitLines(newText);
+
+		java.util.List<ScbDiffEntry> diffs = computeLineDiffWithContext(oldLines, newLines);
+
+		StringBuilder sb = new StringBuilder();
+
+		String currentClass = null;
+		String currentFunction = null;
+
+		int shown = 0;
+		final int LIMIT = 120;
+
+		for (ScbDiffEntry d : diffs) {
+
+			// imprimir class si cambia
+			if (!safeEquals(currentClass, d.className)) {
+				currentClass = d.className;
+				currentFunction = null;
+
+				sb.append("Class ").append(currentClass != null ? currentClass : "?").append("\n");
+			}
+
+			// imprimir function si cambia
+			if (!safeEquals(currentFunction, d.functionName)) {
+				currentFunction = d.functionName;
+
+				sb.append("  Function ").append(currentFunction != null ? currentFunction : "?").append("\n\n");
+			}
+
+			sb.append("   - Line ").append(d.lineNumber).append("\n");
+			sb.append("      • ").append(d.text).append("\n\n");
+
+			shown++;
+			if (shown >= LIMIT) {
+				sb.append("... more changes not shown\n");
+				break;
+			}
+		}
+
+		if (sb.length() == 0) {
+			return "- No changes detected in SCB\n";
+		}
+
+		return sb.toString().trim();
+	}
+
+	private java.util.List<ScbDiffEntry> computeLineDiffWithContext(
+			java.util.List<String> oldLines,
+			java.util.List<String> newLines) {
+
+		int m = oldLines.size();
+		int n = newLines.size();
+
+		int[][] dp = new int[m + 1][n + 1];
+
+		for (int i = m - 1; i >= 0; i--) {
+			for (int j = n - 1; j >= 0; j--) {
+				if (safeEquals(oldLines.get(i), newLines.get(j))) {
+					dp[i][j] = dp[i + 1][j + 1] + 1;
+				} else {
+					dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+				}
+			}
+		}
+
+		java.util.List<ScbDiffEntry> result = new java.util.ArrayList<>();
+
+		String currentClass = null;
+		String currentFunction = null;
+
+		int i = 0, j = 0;
+
+		while (i < m && j < n) {
+			String o = oldLines.get(i);
+			String nLine = newLines.get(j);
+
+			// actualizar contexto
+			if (isClassLine(nLine)) currentClass = extractClassName(nLine);
+			if (isFunctionLine(nLine)) currentFunction = extractFunctionName(nLine);
+
+			if (safeEquals(o, nLine)) {
+				i++;
+				j++;
+			} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+				result.add(new ScbDiffEntry(
+					i + 1,
+					"removed: " + formatDiffValue(o),
+					currentClass,
+					currentFunction
+				));
+				i++;
+			} else {
+				result.add(new ScbDiffEntry(
+					j + 1,
+					"added: " + formatDiffValue(nLine),
+					currentClass,
+					currentFunction
+				));
+				j++;
+			}
+		}
+
+		while (i < m) {
+			result.add(new ScbDiffEntry(
+				i + 1,
+				"removed: " + formatDiffValue(oldLines.get(i)),
+				currentClass,
+				currentFunction
+			));
+			i++;
+		}
+
+		while (j < n) {
+			result.add(new ScbDiffEntry(
+				j + 1,
+				"added: " + formatDiffValue(newLines.get(j)),
+				currentClass,
+				currentFunction
+			));
+			j++;
+		}
+
+		return result;
+	}
+
+	private boolean isClassLine(String line) {
+		return line != null && line.startsWith("Class ");
+	}
+
+	private String extractClassName(String line) {
+		return line.replace("Class", "").trim();
+	}
+
+	private boolean isFunctionLine(String line) {
+		return line != null && line.startsWith("Function ");
+	}
+
+	private String extractFunctionName(String line) {
+		String name = line.replace("Function", "").trim();
+		int idx = name.indexOf("(");
+		return idx >= 0 ? name.substring(0, idx) : name;
+	}
+
+	private java.util.List<String> computeLineDiff(java.util.List<String> oldLines, java.util.List<String> newLines) {
+		int m = oldLines.size();
+		int n = newLines.size();
+
+		int[][] dp = new int[m + 1][n + 1];
+
+		// LCS
+		for (int i = m - 1; i >= 0; i--) {
+			for (int j = n - 1; j >= 0; j--) {
+				if (safeEquals(oldLines.get(i), newLines.get(j))) {
+					dp[i][j] = dp[i + 1][j + 1] + 1;
+				} else {
+					dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+				}
+			}
+		}
+
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		int i = 0, j = 0;
+
+		while (i < m && j < n) {
+			String o = oldLines.get(i);
+			String nLine = newLines.get(j);
+
+			if (safeEquals(o, nLine)) {
+				i++;
+				j++;
+			} else if (dp[i + 1][j] >= dp[i][j + 1]) {
+				result.add(formatRemoved(i, o));
+				i++;
+			} else {
+				result.add(formatAdded(j, nLine));
+				j++;
+			}
+		}
+
+		while (i < m) {
+			result.add(formatRemoved(i, oldLines.get(i)));
+			i++;
+		}
+
+		while (j < n) {
+			result.add(formatAdded(j, newLines.get(j)));
+			j++;
+		}
+
+		return result;
+	}
+
+	private String formatAdded(int index, String line) {
+		return "- Line " + (index + 1) + "\n   • added: " + formatDiffValue(line);
+	}
+
+	private String formatRemoved(int index, String line) {
+		return "- Line " + (index + 1) + "\n   • removed: " + formatDiffValue(line);
+	}
+
+	private java.util.List<String> splitLines(String text) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+
+		if (text == null) return result;
+
+		String[] lines = text.split("\\r?\\n");
+		for (String l : lines) {
+			result.add(l.trim());
+		}
+
+		return result;
 	}
 
 	private java.util.List<String> extractBuildingBlocks(String text) {
