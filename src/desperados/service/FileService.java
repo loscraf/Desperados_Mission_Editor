@@ -80,6 +80,9 @@ public class FileService {
 	
 	private static File dvdFile;
 
+	private static String elementText;
+	private static List<Element> elements;
+
 	public static void setMain(MainGUI mainGui) {
 		main = mainGui;
 	}
@@ -332,6 +335,19 @@ public class FileService {
 
 	public static List<WaypointRoute> getWaypointRoutes() {
 		return waypointService.getWaypointRoutes();
+	}
+
+	public static void setElementText(String text) {
+		try {
+			// Reemplaza el contenido interno que usa getElements()
+			elementText = text;
+
+			// Si tienes cache de elementos, invalidarla
+			elements = null;
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	public static String getElementText() {

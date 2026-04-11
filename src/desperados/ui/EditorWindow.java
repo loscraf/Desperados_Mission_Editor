@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.40";
+	private final static String appVersion = "v1.41";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -183,6 +183,9 @@ public class EditorWindow {
 	private desperados.dvd.elements.Element draggedElement = null;
 	private int dragOffsetX;
 	private int dragOffsetY;
+
+	private boolean isCloneDrag = false;
+	private desperados.dvd.elements.Element cloneElement = null;
 
 	// Aquí empiezan los métodos
 	private void initComboItems() {
@@ -553,15 +556,23 @@ public class EditorWindow {
 				if (isDraggingElement) {
 					isDraggingElement = false;
 
-					regenerateJSON();
+					if (!isCloneDrag) {
+						// Mover → regenerar JSON
+						regenerateJSON();
 
-					// Guarda el cambio para poder hacer undo/redo del movimiento del elemento
-					text.notifyListeners(SWT.Modify, new Event());
+						// Sincronizar con FileService
+    					FileService.setElementText(text.getText());
 
-					// Actualiza panel + sprite
+						text.notifyListeners(SWT.Modify, new Event());
+					}
+
+					// Clone ya fue insertado en MouseDown
 					displayElementInfo(draggedElement);
 
-					return; // Evitar click normal
+					isCloneDrag = false;
+					cloneElement = null;
+
+					return;
 				}
 
 				String coordText = (e.x) + "," + (e.y);
@@ -588,8 +599,28 @@ public class EditorWindow {
 			boolean clicked = detectClickedElement(e.x, e.y);
 
 			if (clicked && currentElement != null) {
+				boolean ctrlPressed = (e.stateMask & SWT.CTRL) != 0;
+
+				if (ctrlPressed) {
+					// 🔥 Modo clon
+					isCloneDrag = true;
+
+					int nextId = findNextElementId(comboTexts[ScriptItems.ELEM.ordinal()]);
+					String newId = "Element_" + nextId;
+
+					cloneElement = cloneElementObject(currentElement, newId);
+
+					if (cloneElement == null) return;
+
+					draggedElement = cloneElement;
+
+				} else {
+					// Modo normal: mover elemento existente
+					isCloneDrag = false;
+					draggedElement = currentElement;
+				}
+
 				isDraggingElement = true;
-				draggedElement = currentElement;
 
 				int originX = scrolledCanvas.getOrigin().x;
 				int originY = scrolledCanvas.getOrigin().y;
@@ -597,10 +628,8 @@ public class EditorWindow {
 				int mouseX = e.x + originX;
 				int mouseY = e.y + originY;
 
-				dragOffsetX = mouseX - currentElement.getX();
-				dragOffsetY = mouseY - currentElement.getY();
-
-				System.out.println("DRAG START ✔");
+				dragOffsetX = mouseX - draggedElement.getX();
+				dragOffsetY = mouseY - draggedElement.getY();
 			}
 		});
 		
@@ -3723,6 +3752,42 @@ public class EditorWindow {
 
 		// Refrescar la vista del elemento recién agregado y seleccionarlo
 		selectNewElementFromJson(newIdentifier);
+	}
+
+	private desperados.dvd.elements.Element cloneElementObject(
+        	desperados.dvd.elements.Element source, String newId) {
+
+		try {
+			String text = comboTexts[ScriptItems.ELEM.ordinal()];
+			String sourceId = source.getIdentifier();
+
+			String block = extractElementBlock(text, sourceId);
+			if (block == null) return null;
+
+			String newBlock = block.replaceFirst(
+				"\"identifier\"\\s*:\\s*\"" + Pattern.quote(sourceId) + "\"",
+				"\"identifier\" : \"" + newId + "\""
+			);
+
+			String updated = insertAtEndOfElemArray(text, newBlock);
+
+			// Para undo, cambios, etc
+			setComboText(ScriptItems.ELEM.ordinal(), updated);
+
+			// Recargar elementos
+			List<desperados.dvd.elements.Element> elements = FileService.getElements();
+
+			for (desperados.dvd.elements.Element e : elements) {
+				if (newId.equals(e.getIdentifier())) {
+					return e;
+				}
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return null;
 	}
 
 	private void selectNewElementFromJson(String identifier) {
