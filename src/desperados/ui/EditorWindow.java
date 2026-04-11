@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.41";
+	private final static String appVersion = "v1.42";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -186,6 +186,9 @@ public class EditorWindow {
 
 	private boolean isCloneDrag = false;
 	private desperados.dvd.elements.Element cloneElement = null;
+
+	// Mover elementos con el teclado
+	private boolean isKeyboardMoving = false;
 
 	// Aquí empiezan los métodos
 	private void initComboItems() {
@@ -651,6 +654,50 @@ public class EditorWindow {
 			canvas.redraw();
 		});
 		
+		// Atajos de teclado para mover elementos con las flechas
+		canvas.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+
+				if (currentElement == null) return;
+
+				int step = 1;
+
+				if ((e.stateMask & SWT.SHIFT) != 0) step = 10;
+				if ((e.stateMask & SWT.CTRL) != 0) step = 50;
+
+				int dx = 0;
+				int dy = 0;
+
+				switch (e.keyCode) {
+					case SWT.ARROW_LEFT:  dx = -step; break;
+					case SWT.ARROW_RIGHT: dx = step;  break;
+					case SWT.ARROW_UP:    dy = -step; break;
+					case SWT.ARROW_DOWN:  dy = step;  break;
+					default: return;
+				}
+
+				moveCurrentElement(dx, dy);
+			}
+		});
+		canvas.addListener(SWT.MouseDown, e -> {
+			canvas.setFocus();
+		});
+		canvas.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyReleased(KeyEvent e) {
+
+				if (!isKeyboardMoving) return;
+
+				isKeyboardMoving = false;
+				displayElementInfo(currentElement);
+
+				// Ahora sí: commit real
+				regenerateJSON();
+				text.notifyListeners(SWT.Modify, new Event());
+			}
+		});
+
 		canvas.addKeyListener(new KeyListener() {
 			@Override
 			public void keyPressed(KeyEvent e) {}
@@ -1401,6 +1448,24 @@ public class EditorWindow {
 		}
 
 		return result[0];
+	}
+
+	private void moveCurrentElement(int dx, int dy) {
+		try {
+			isKeyboardMoving = true;
+
+			int newX = Math.max(0, Math.min(32767, currentElement.getX() + dx));
+			int newY = Math.max(0, Math.min(32767, currentElement.getY() + dy));
+
+			currentElement.setX((short)newX);
+			currentElement.setY((short)newY);
+
+			// Solo UI (fluido)
+			canvas.redraw();
+
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
 	}
 
 	private void cloneElementAt(String sourceId, int x, int y) {
