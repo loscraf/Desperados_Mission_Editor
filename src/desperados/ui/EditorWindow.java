@@ -50,12 +50,12 @@ import desperados.exception.ServiceException;
 import desperados.scb.ScbParser;
 
 public class EditorWindow {
-	// Variables
+	//Variables
 	public static String gameDir;
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.43";
+	private final static String appVersion = "v1.44";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -122,12 +122,11 @@ public class EditorWindow {
 	private StyledText textCoords;
 	private Label spriteLabel;
 
-	// Buscador antiguo)
+	//Resultados de búsqueda actuales (índices de líneas que coinciden)
 	private Text searchText;
-
-	// Resultados de búsqueda actuales (índices de líneas que coinciden)
-	private java.util.List<int[]> searchMatches = new java.util.ArrayList<>();
+	private java.util.List<Integer> searchMatches = new java.util.ArrayList<>();
 	private int currentMatchIndex = -1;
+	private Label searchCount;
 
 	private String[] originalComboTexts;
 	private Combo combo;
@@ -152,7 +151,7 @@ public class EditorWindow {
 
 	private java.util.LinkedHashSet<String> pendingLogicalChanges = new java.util.LinkedHashSet<>();
 
-	// valor inicial al entrar en edición de un campo del panel rojo
+	//Valor inicial al entrar en edición de un campo del panel rojo
 	private java.util.HashMap<Text, String> fieldEditStartValues = new java.util.HashMap<>();
 	
 	private int activeComboItem;
@@ -185,7 +184,7 @@ public class EditorWindow {
 		}
 	}
 
-	// Drag and drop de elementos directamente desde el mapa
+	//Drag and drop de elementos directamente desde el mapa
 	private boolean isDraggingElement = false;
 	private desperados.dvd.elements.Element draggedElement = null;
 	private int dragOffsetX;
@@ -194,10 +193,10 @@ public class EditorWindow {
 	private boolean isCloneDrag = false;
 	private desperados.dvd.elements.Element cloneElement = null;
 
-	// Mover elementos con el teclado
+	//Mover elementos con el teclado
 	private boolean isKeyboardMoving = false;
 
-	// Aquí empiezan los métodos
+	//Aquí empiezan los métodos
 	private void initComboItems() {
 		activeComboItem = 0;
 		
@@ -489,7 +488,7 @@ public class EditorWindow {
 			}
 		});
 		
-		// Layout para el shell con el SashForm
+		//Layout para el shell con el SashForm
 		GridLayout shellLayout = new GridLayout();
 		shellLayout.numColumns = 1;
 		shell.setLayout(shellLayout);
@@ -661,7 +660,7 @@ public class EditorWindow {
 			canvas.redraw();
 		});
 		
-		// Atajos de teclado para mover elementos con las flechas
+		//Atajos de teclado para mover elementos con las flechas
 		canvas.addKeyListener(new KeyAdapter() {
 			@Override
 			public void keyPressed(KeyEvent e) {
@@ -768,7 +767,7 @@ public class EditorWindow {
 		Composite contentComposite = new Composite(mainSash, SWT.BORDER);
 		contentComposite.setLayout(new GridLayout());
 		
-		// Establecer proporciones iniciales para el SashForm (60% mapa, 40% panel derecho)
+		//Establecer proporciones iniciales para el SashForm (60% mapa, 40% panel derecho)
 		mainSash.setWeights(new int[] { 60, 40 });
 		
 		Composite undoRedoComposite = new Composite(contentComposite, SWT.NONE);
@@ -798,7 +797,7 @@ public class EditorWindow {
 	        }
 	    });
 		
-	    // Crear composite para agrupar checkboxes horizontalmente
+	    //Crear contenedor (composite) para agrupar checkboxes horizontalmente
 	    Composite checkBoxComposite1 = new Composite(contentComposite, SWT.NONE);
 	    GridLayout checkLayout1 = new GridLayout();
 	    checkLayout1.numColumns = 4;
@@ -945,12 +944,21 @@ public class EditorWindow {
 	        }
 	    });
 	    
+		//Contenedor exclusivo para el buscador y navegación de resultados
+		Composite searchComposite = new Composite(contentComposite, SWT.NONE);
+		GridLayout searchLayout = new GridLayout(5, false);
+		searchLayout.marginWidth = 0;
+		searchLayout.marginHeight = 0;
+		searchComposite.setLayout(searchLayout);
+		searchComposite.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+
 		//Buscador que resalta coincidencias y permite navegar entre ellas
-	    Label searchLabel = new Label(contentComposite, SWT.NONE);
+	    Label searchLabel = new Label(searchComposite, SWT.NONE);
 	    searchLabel.setText("Search:");
 	    
-	    searchText = new Text(contentComposite, SWT.BORDER);
-	    searchText.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+	    searchText = new Text(searchComposite, SWT.BORDER);
+	    GridData textData = new GridData(SWT.FILL, SWT.CENTER, true, false);
+		searchText.setLayoutData(textData);
 	    searchText.addModifyListener(new ModifyListener() {
 	        @Override
 	        public void modifyText(ModifyEvent e) {
@@ -959,14 +967,18 @@ public class EditorWindow {
 	        }
 	    });
 		// Botones para navegar entre coincidencias de búsqueda
-		Button prevButton = new Button(contentComposite, SWT.PUSH);
-		prevButton.setText("Anterior");
+		Button prevButton = new Button(searchComposite, SWT.PUSH);
+		prevButton.setText("◀");
 		prevButton.addListener(SWT.Selection, e -> prevMatch());
-
-		Button nextButton = new Button(contentComposite, SWT.PUSH);
-		nextButton.setText("Siguiente");
+		Button nextButton = new Button(searchComposite, SWT.PUSH);
+		nextButton.setText("▶");
 		nextButton.addListener(SWT.Selection, e -> nextMatch());
-	    
+		// Contador de coincidencias
+		searchCount = new Label(searchComposite, SWT.NONE);
+		GridData countData = new GridData(SWT.RIGHT, SWT.CENTER, false, false);
+		countData.widthHint = 70; // probá 60–80 según fuente
+		searchCount.setLayoutData(countData);
+
 	    combo = new Combo(contentComposite, SWT.DROP_DOWN | SWT.READ_ONLY);
 	    combo.setItems(comboItems);
 	    combo.select(0);
@@ -1916,53 +1928,49 @@ public class EditorWindow {
 		searchMatches.clear();
 		currentMatchIndex = -1;
 
-		// limpiar estilos previos
-		text.setStyleRanges(new StyleRange[0]);
+		text.setStyleRanges(new StyleRange[0]); // limpiar resaltado
 
-		if (searchTerm == null || searchTerm.isEmpty()) return;
-
-		String content = text.getText().toLowerCase();
-		String search = searchTerm.toLowerCase();
-
-		int index = 0;
-
-		while ((index = content.indexOf(search, index)) >= 0) {
-			searchMatches.add(new int[]{index, search.length()});
-			index += search.length();
+		if (searchTerm == null || searchTerm.isEmpty()) {
+			searchCount.setText("0/0");
+			return;
 		}
 
-		// aplicar highlight
+		String content = text.getText().toLowerCase();
+		int index = 0;
+
 		java.util.List<StyleRange> styles = new java.util.ArrayList<>();
 
-		for (int[] match : searchMatches) {
+		while ((index = content.indexOf(searchTerm, index)) >= 0) {
+			searchMatches.add(index);
+
 			StyleRange style = new StyleRange();
-			style.start = match[0];
-			style.length = match[1];
-			style.background = Display.getDefault().getSystemColor(SWT.COLOR_YELLOW);
+			style.start = index;
+			style.length = searchTerm.length();
+			style.background = org.eclipse.swt.widgets.Display.getDefault().getSystemColor(SWT.COLOR_YELLOW);
+
 			styles.add(style);
+
+			index += searchTerm.length();
 		}
 
 		text.setStyleRanges(styles.toArray(new StyleRange[0]));
 
-		// seleccionar el primero
+		// 🔥 seleccionar el primero automáticamente
 		if (!searchMatches.isEmpty()) {
 			currentMatchIndex = 0;
-			selectCurrentMatch();
+			goToMatch(0);
 		}
+
+		updateSearchCounter();
 	}
-	private void selectCurrentMatch() {
-		if (currentMatchIndex < 0 || currentMatchIndex >= searchMatches.size()) return;
+	private void goToMatch(int index) {
+		int pos = searchMatches.get(index);
 
-		int[] match = searchMatches.get(currentMatchIndex);
-
-		int start = match[0];
-		int end = start + match[1];
-
-		text.setSelection(start, end);
-
-		int line = text.getLineAtOffset(start);
-		text.setTopIndex(Math.max(0, line - 5));
+		text.setSelection(pos, pos + searchText.getText().length());
 		text.showSelection();
+
+		int line = text.getLineAtOffset(pos);
+		text.setTopIndex(Math.max(0, line - 5));
 	}
 	private void prevMatch() {
 		if (searchMatches.isEmpty()) return;
@@ -1972,17 +1980,24 @@ public class EditorWindow {
 			currentMatchIndex = searchMatches.size() - 1;
 		}
 
-		selectCurrentMatch();
+		goToMatch(currentMatchIndex);
+		updateSearchCounter();
 	}
 	private void nextMatch() {
 		if (searchMatches.isEmpty()) return;
 
-		currentMatchIndex++;
-		if (currentMatchIndex >= searchMatches.size()) {
-			currentMatchIndex = 0;
-		}
+		currentMatchIndex = (currentMatchIndex + 1) % searchMatches.size();
+		goToMatch(currentMatchIndex);
+		updateSearchCounter();
+	}
+	private void updateSearchCounter() {
+		int total = searchMatches.size();
 
-		selectCurrentMatch();
+		if (total == 0) {
+			searchCount.setText("0/0");
+		} else {
+			searchCount.setText((currentMatchIndex + 1) + "/" + total);
+		}
 	}
 
 	private void saveToHistory() {
