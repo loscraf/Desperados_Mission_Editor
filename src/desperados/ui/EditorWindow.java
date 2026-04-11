@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.42";
+	private final static String appVersion = "v1.43";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -121,7 +121,14 @@ public class EditorWindow {
 	private StyledText textConsole;
 	private StyledText textCoords;
 	private Label spriteLabel;
+
+	// Buscador antiguo)
 	private Text searchText;
+
+	// Resultados de búsqueda actuales (índices de líneas que coinciden)
+	private java.util.List<int[]> searchMatches = new java.util.ArrayList<>();
+	private int currentMatchIndex = -1;
+
 	private String[] originalComboTexts;
 	private Combo combo;
 	private desperados.dvd.elements.Element currentElement;
@@ -938,6 +945,7 @@ public class EditorWindow {
 	        }
 	    });
 	    
+		//Buscador que resalta coincidencias y permite navegar entre ellas
 	    Label searchLabel = new Label(contentComposite, SWT.NONE);
 	    searchLabel.setText("Search:");
 	    
@@ -947,9 +955,17 @@ public class EditorWindow {
 	        @Override
 	        public void modifyText(ModifyEvent e) {
 	            String searchTerm = searchText.getText().toLowerCase();
-	            applySearchFilter(searchTerm);
+	            highlightSearch(searchTerm);
 	        }
 	    });
+		// Botones para navegar entre coincidencias de búsqueda
+		Button prevButton = new Button(contentComposite, SWT.PUSH);
+		prevButton.setText("Anterior");
+		prevButton.addListener(SWT.Selection, e -> prevMatch());
+
+		Button nextButton = new Button(contentComposite, SWT.PUSH);
+		nextButton.setText("Siguiente");
+		nextButton.addListener(SWT.Selection, e -> nextMatch());
 	    
 	    combo = new Combo(contentComposite, SWT.DROP_DOWN | SWT.READ_ONLY);
 	    combo.setItems(comboItems);
@@ -1895,34 +1911,78 @@ public class EditorWindow {
 		resetCurrentSectionUnsavedChanges();
 	}
 
-	private void applySearchFilter(String searchTerm) {
-		if (searchTerm.isEmpty()) {
-			isRestoring = true;
-			text.setText(originalComboTexts[activeComboItem]);
-			isRestoring = false;
-			comboTexts[activeComboItem] = originalComboTexts[activeComboItem];
-			return;
+	// Buscador nuevo, que resalta las coincidencias en amarillo sin modificar el texto
+	private void highlightSearch(String searchTerm) {
+		searchMatches.clear();
+		currentMatchIndex = -1;
+
+		// limpiar estilos previos
+		text.setStyleRanges(new StyleRange[0]);
+
+		if (searchTerm == null || searchTerm.isEmpty()) return;
+
+		String content = text.getText().toLowerCase();
+		String search = searchTerm.toLowerCase();
+
+		int index = 0;
+
+		while ((index = content.indexOf(search, index)) >= 0) {
+			searchMatches.add(new int[]{index, search.length()});
+			index += search.length();
 		}
-		
-		String original = originalComboTexts[activeComboItem];
-		String[] lines = original.split("\n");
-		StringBuilder filtered = new StringBuilder();
-		
-		for (String line : lines) {
-			if (line.toLowerCase().contains(searchTerm)) {
-				filtered.append(line).append("\n");
-			}
+
+		// aplicar highlight
+		java.util.List<StyleRange> styles = new java.util.ArrayList<>();
+
+		for (int[] match : searchMatches) {
+			StyleRange style = new StyleRange();
+			style.start = match[0];
+			style.length = match[1];
+			style.background = Display.getDefault().getSystemColor(SWT.COLOR_YELLOW);
+			styles.add(style);
 		}
-		
-		String result = filtered.toString();
-		if (result.endsWith("\n")) {
-			result = result.substring(0, result.length() - 1);
+
+		text.setStyleRanges(styles.toArray(new StyleRange[0]));
+
+		// seleccionar el primero
+		if (!searchMatches.isEmpty()) {
+			currentMatchIndex = 0;
+			selectCurrentMatch();
 		}
-		
-		isRestoring = true;
-		text.setText(result);
-		isRestoring = false;
-		comboTexts[activeComboItem] = result;
+	}
+	private void selectCurrentMatch() {
+		if (currentMatchIndex < 0 || currentMatchIndex >= searchMatches.size()) return;
+
+		int[] match = searchMatches.get(currentMatchIndex);
+
+		int start = match[0];
+		int end = start + match[1];
+
+		text.setSelection(start, end);
+
+		int line = text.getLineAtOffset(start);
+		text.setTopIndex(Math.max(0, line - 5));
+		text.showSelection();
+	}
+	private void prevMatch() {
+		if (searchMatches.isEmpty()) return;
+
+		currentMatchIndex--;
+		if (currentMatchIndex < 0) {
+			currentMatchIndex = searchMatches.size() - 1;
+		}
+
+		selectCurrentMatch();
+	}
+	private void nextMatch() {
+		if (searchMatches.isEmpty()) return;
+
+		currentMatchIndex++;
+		if (currentMatchIndex >= searchMatches.size()) {
+			currentMatchIndex = 0;
+		}
+
+		selectCurrentMatch();
 	}
 
 	private void saveToHistory() {
