@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.44";
+	private final static String appVersion = "v1.45";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -767,8 +767,8 @@ public class EditorWindow {
 		Composite contentComposite = new Composite(mainSash, SWT.BORDER);
 		contentComposite.setLayout(new GridLayout());
 		
-		//Establecer proporciones iniciales para el SashForm (60% mapa, 40% panel derecho)
-		mainSash.setWeights(new int[] { 60, 40 });
+		//Establecer proporciones iniciales para el SashForm (55% mapa, 45% panel derecho)
+		mainSash.setWeights(new int[] { 55, 45 });
 		
 		Composite undoRedoComposite = new Composite(contentComposite, SWT.NONE);
 		GridLayout undoRedoLayout = new GridLayout();
@@ -970,13 +970,31 @@ public class EditorWindow {
 		Button prevButton = new Button(searchComposite, SWT.PUSH);
 		prevButton.setText("◀");
 		prevButton.addListener(SWT.Selection, e -> prevMatch());
+		prevButton.setToolTipText("Previous match (Shift + Enter)");
 		Button nextButton = new Button(searchComposite, SWT.PUSH);
 		nextButton.setText("▶");
 		nextButton.addListener(SWT.Selection, e -> nextMatch());
+		nextButton.setToolTipText("Next match (Enter)");
+		// Atajo de teclado para navegación: Enter para siguiente, Shift+Enter para anterior
+		searchText.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.keyCode == SWT.CR || e.keyCode == SWT.KEYPAD_CR) {
+					if ((e.stateMask & SWT.SHIFT) != 0) {
+						// 🔥 Shift + Enter → anterior
+						prevMatch();
+					} else {
+						// 🔥 Enter → siguiente
+						nextMatch();
+					}
+					e.doit = false; // evita beep / comportamiento raro
+				}
+			}
+		});
 		// Contador de coincidencias
 		searchCount = new Label(searchComposite, SWT.NONE);
 		GridData countData = new GridData(SWT.RIGHT, SWT.CENTER, false, false);
-		countData.widthHint = 70; // probá 60–80 según fuente
+		countData.widthHint = 70;
 		searchCount.setLayoutData(countData);
 
 	    combo = new Combo(contentComposite, SWT.DROP_DOWN | SWT.READ_ONLY);
