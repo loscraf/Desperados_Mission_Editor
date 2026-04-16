@@ -1,5 +1,8 @@
 English
+
 This tutorial is for correctly compiling the project, then assembling the artifact and being able to generate the editor's .jar file.
+
+UPDATE 16-4-2026: Since the project uses Gradle, just follow step 1: clone the repository on GitHub, open the cloned folder with Visual Studio Code (it should be Desperados_Mission_Editor), and it will detect the Gradle project. In the task list, use `build` to generate the .jar file and `run` to run the .jar file and test the app. If it asks you to install Java extensions, Gradle, etc., you must do so for it to detect Gradle and the Java project (wait, it takes some time. Restart Visual Studio Code if prompted).
 
 1- Install "OpenJDK8U-jdk_x64_win_8u482b08.exe", this is java dk (development kit) v8, for old projects like this.
 
@@ -48,6 +51,8 @@ Note: The JAR file "org.eclipse.swt.win32.win32.x86_64_3.105.0.v20160603-0902" i
 Spanish
 
 Este tutorial es para compilar correctamente el proyecto, luego armar el artefacto y poder generar el .jar del editor
+
+ACTUALIZACIÓN 16-4-2026: como el proyecto usa gradle, solo seguir el paso 1, clonar el repositorio en gitHub, abrir la carpeta clonada con Visual Studio Code (debería ser Desperados_Mission_Editor), detectará que hay un proyecto gradle. En task, usar build para generar el .jar y run para correr el .jar y probar la app. Si nos pide instalar extensiones de java, gradle y demás, debemos hacerlo para que detecte gradle y al proyecto java (esperar, tarda su tiempo. Reiniciar Visual Studio Code si lo pide).
 
 1- Instalar "OpenJDK8U-jdk_x64_win_8u482b08.exe", esto es java dk (development kit, kit para desarrolladores), para proyectos viejos como este.
 

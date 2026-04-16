@@ -55,7 +55,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.45";
+	private final static String appVersion = "v1.46, credits to herbert3000";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -195,6 +195,12 @@ public class EditorWindow {
 
 	//Mover elementos con el teclado
 	private boolean isKeyboardMoving = false;
+
+	//Para ejecutar el juego directamente desde el editor (se asume que el usuario tiene el juego en Steam)
+	private String steamAppId = "260730";
+
+	//Animación de elementos, para detener al presionar back para volver a la ventana anterior
+	private boolean animationRunning = false;
 
 	//Aquí empiezan los métodos
 	private void initComboItems() {
@@ -406,7 +412,7 @@ public class EditorWindow {
 		});
 		
 		Label lbl = new Label(shell, SWT.NONE);
-		lbl.setText("Drag and drop a .dvd file or Enter level number and press enter:");
+		lbl.setText("Drag and drop a .dvd file or Enter level number (1 to 25) and press enter:");
 		
 		Text text = new Text(shell, SWT.BORDER);
 		text.setFocus();
@@ -499,30 +505,30 @@ public class EditorWindow {
 		
 		ScrolledComposite sc = new ScrolledComposite(mainSash, SWT.H_SCROLL | SWT.V_SCROLL);
 		
-		Thread updateThread = new Thread() {
-	        public void run() {
-	            while (true) {
-	                display.syncExec(new Runnable() {
-	                    @Override
-	                    public void run() {
-	                    	if ((drawAnimations || drawElements) && !canvas.isDisposed()) {
-	                    		canvas.redraw();
-	                    	}
-	                    }
-	                });
-	                try {
-	                    Thread.sleep(200);
-	                } catch (InterruptedException e) {
-	                    e.printStackTrace();
-	                }
-	            }
-	        }
-	    };
-	    updateThread.setDaemon(true);
-	    updateThread.start();
+		// Thread updateThread = new Thread() {
+	    //     public void run() {
+	    //         while (true) {
+	    //             display.syncExec(new Runnable() {
+	    //                 @Override
+	    //                 public void run() {
+	    //                 	if ((drawAnimations || drawElements) && !canvas.isDisposed()) {
+	    //                 		canvas.redraw();
+	    //                 	}
+	    //                 }
+	    //             });
+	    //             try {
+	    //                 Thread.sleep(200);
+	    //             } catch (InterruptedException e) {
+	    //                 e.printStackTrace();
+	    //             }
+	    //         }
+	    //     }
+	    // };
+	    // updateThread.setDaemon(true);
+	    // updateThread.start();
 		
 		canvas = new Canvas(sc, SWT.DOUBLE_BUFFERED);
-
+		startAnimationLoop();
 		DropTarget canvasDropTarget = new DropTarget(canvas, DND.DROP_COPY | DND.DROP_MOVE);
 		canvasDropTarget.setTransfer(new Transfer[] { TextTransfer.getInstance() });
 
@@ -565,15 +571,13 @@ public class EditorWindow {
 				if (isDraggingElement) {
 					isDraggingElement = false;
 
-					if (!isCloneDrag) {
-						// Mover → regenerar JSON
-						regenerateJSON();
+					// Mover → regenerar JSON
+					regenerateJSON();
 
-						// Sincronizar con FileService
-    					FileService.setElementText(text.getText());
+					// Sincronizar con FileService
+					FileService.setElementText(text.getText());
 
-						text.notifyListeners(SWT.Modify, new Event());
-					}
+					text.notifyListeners(SWT.Modify, new Event());
 
 					// Clone ya fue insertado en MouseDown
 					displayElementInfo(draggedElement);
@@ -1343,8 +1347,12 @@ public class EditorWindow {
 		    }
 		});
 		
-		//Escribir cambios en el archivo
-	    Button buttonUpdate = new Button(contentComposite, SWT.NONE);
+		//Contenedor exclusivo para los botones guardar cambios, ejecutar juego y volver atrás
+		Composite updateRunBackComposite = new Composite(contentComposite, SWT.NONE);
+		updateRunBackComposite.setLayout(new GridLayout(3, false));
+		updateRunBackComposite.setLayoutData(new GridData(SWT.NONE, SWT.CENTER, true, false));
+		// Escribir cambios en el archivo
+	    Button buttonUpdate = new Button(updateRunBackComposite, SWT.NONE);
 		buttonUpdate.setText("Write Current Section To File");
 		buttonUpdate.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -1397,11 +1405,140 @@ public class EditorWindow {
 				markCurrentSectionAsSaved();
 			}
 		});
-	    
-	    // Establecer tamaño y posición del shell
+		// Ejecutar juego
+		Button runGameButton = new Button(updateRunBackComposite, SWT.PUSH);
+		runGameButton.setText("Run Game");
+		runGameButton.addListener(SWT.Selection, e -> runGame());
+		// Volver al inicio
+	    Button backButton = new Button(updateRunBackComposite, SWT.PUSH);
+		backButton.setText("Back");
+		backButton.addListener(SWT.Selection, e -> {
+			int result = confirmSaveChanges();
+
+			// 🔥 cancelar SI NO es YES ni NO
+			// if (result != SWT.YES && result != SWT.NO) {
+			// 	return;
+			// }
+
+			if (result == SWT.YES) {
+				// 🔥 MISMA LÓGICA QUE WRITE
+				if (activeComboItem == ScriptItems.ELEM.ordinal()) {
+					writeElementsToDvd();
+				} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
+					writeWaypointsToDvd();
+				} else if (activeComboItem == ScriptItems.SCRP.ordinal()) {
+					writeLocationsToDvd();
+				} else if (activeComboItem == ScriptItems.SCB.ordinal()) {
+					writeScriptToScb();
+				} else if (activeComboItem == ScriptItems.BUIL.ordinal()) {
+					writeBuildingsToDvd();
+				}
+
+				markCurrentSectionAsSaved();
+			}
+
+			// SWT.NO → descarta
+			goBackToStart();
+		});
+
+	    //Establecer tamaño y posición del shell
 	    shell.setSize(1400, 900);
 	    shell.setLocation(100, 100);
 	}
+
+	private void runGame() {
+		if (gameDir == null || exeName == null) {
+			MessageBox box = new MessageBox(shell, SWT.ICON_WARNING | SWT.OK);
+			box.setText("Warning");
+			box.setMessage("Game directory not set!");
+			box.open();
+			return;
+		}
+
+		try {
+			boolean launched = false;
+			// Prioridad: Steam si hay AppID
+			if (steamAppId != null && !steamAppId.isEmpty()) {
+				String steamUrl = "steam://run/" + steamAppId;
+				launched = Program.launch(steamUrl);
+			}
+
+			// 🔥 Si Steam falló → usar exe
+			if (!launched) {
+				ProcessBuilder pb = new ProcessBuilder(exeName);
+				pb.directory(new File(gameDir));
+				pb.start();
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void goBackToStart() {
+		try {
+			stopAnimationLoop();
+
+			shell.dispose();
+
+			shell = new Shell(Display.getDefault());
+			shell.setText(appName + " " + appVersion);
+
+			createContentsEmpty(Display.getDefault());
+
+			shell.open();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	private int confirmSaveChanges() {
+		if (!hasUnsavedChangesInCurrentSection()) {
+			return SWT.YES; // no hay cambios → seguir como si aceptara
+		}
+
+		int logicalCount = getUnsavedLogicalChangeCount();
+		String summary = buildCurrentChangesSummary();
+
+		int result = openScrollableConfirmWriteDialog(
+			"Unsaved Changes",
+			"You have unsaved changes.\n\nDo you want to SAVE them before leaving?",
+			logicalCount,
+			summary
+		);
+
+		return result; // SWT.YES, SWT.NO, SWT.CANCEL
+	}
+	private void startAnimationLoop() {
+		if (animationRunning) return;
+
+		animationRunning = true;
+
+		Runnable animator = new Runnable() {
+			@Override
+			public void run() {
+
+				// 🔥 detener si ya no corresponde
+				if (!animationRunning || canvas == null || canvas.isDisposed()) {
+					animationRunning = false;
+					return;
+				}
+
+				if (drawAnimations || drawElements) {
+					canvas.redraw();
+				}
+
+				// 🔁 siguiente frame
+				Display.getDefault().timerExec(200, this);
+			}
+		};
+
+		Display.getDefault().timerExec(200, animator);
+	}
+	private void stopAnimationLoop() {
+		animationRunning = false;
+	}
+
 	private int openScrollableConfirmWriteDialog(String title, String question, int logicalCount, String changeSummary) {
 		final int[] result = new int[] { SWT.CANCEL };
 
