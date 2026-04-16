@@ -32,6 +32,8 @@ import org.eclipse.swt.events.PaintListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
+import org.eclipse.swt.events.ShellAdapter;
+import org.eclipse.swt.events.ShellEvent;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Image;
@@ -55,7 +57,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.46, credits to herbert3000";
+	private final static String appVersion = "v1.47, credits to herbert3000";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -1415,13 +1417,12 @@ public class EditorWindow {
 		backButton.addListener(SWT.Selection, e -> {
 			int result = confirmSaveChanges();
 
-			// 🔥 cancelar SI NO es YES ni NO
-			// if (result != SWT.YES && result != SWT.NO) {
-			// 	return;
-			// }
-
+			// 🔥 CASO 1: CANCEL (cruz o cerrar)
+			if (result == SWT.CANCEL) {
+				return; // NO hacer nada
+			}
+			// 🔥 CASO 2: YES (guardar)
 			if (result == SWT.YES) {
-				// 🔥 MISMA LÓGICA QUE WRITE
 				if (activeComboItem == ScriptItems.ELEM.ordinal()) {
 					writeElementsToDvd();
 				} else if (activeComboItem == ScriptItems.WAYS.ordinal()) {
@@ -1437,7 +1438,7 @@ public class EditorWindow {
 				markCurrentSectionAsSaved();
 			}
 
-			// SWT.NO → descarta
+			// 🔥 CASO 3: NO → descartar
 			goBackToStart();
 		});
 
@@ -1608,9 +1609,12 @@ public class EditorWindow {
 			}
 		});
 
-		dialog.addListener(SWT.Close, e -> {
-			if (result[0] != SWT.YES && result[0] != SWT.NO) {
-				result[0] = SWT.NO;
+		dialog.addShellListener(new ShellAdapter() {
+			@Override
+			public void shellClosed(ShellEvent e) {
+				if (result[0] != SWT.YES && result[0] != SWT.NO) {
+					result[0] = SWT.CANCEL;
+				}
 			}
 		});
 
