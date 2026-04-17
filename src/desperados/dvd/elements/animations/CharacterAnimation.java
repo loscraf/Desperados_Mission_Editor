@@ -39,6 +39,7 @@ public class CharacterAnimation {
 		}
 		this.dvfAnimation = obj.getAnimation(animIndex);
 		
+		// si comento esto, al cargar el nivel, el personaje se desfaza, se corre de la posición que le indique
 		character.setOrigin(origin.x, origin.y);
 		charPos = new Point(character.getX(), character.getY());
 	}
@@ -52,7 +53,16 @@ public class CharacterAnimation {
 	}
 
 	public Point getPosition() {
-		return charPos.add(offset).sub(origin);
+		if (offset == null) {
+			offset = new Point((short)0, (short)0);
+		}
+
+		return new Point(character.getX(), character.getY())
+			.add(offset)
+			.sub(origin);
+
+		// charPos = new Point(character.getX(), character.getY());
+		// return charPos.add(offset).sub(origin);
 	}
 
 	public ImageData getFrame() {

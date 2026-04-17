@@ -97,4 +97,25 @@ public class AnimationService {
 		
 		return obj.getOrigin();
 	}
+
+	public void rebuild(ElementService elementService) {
+		DvfReader dvfReader = new DvfReader();
+
+		characterAnims.clear();
+
+		for (Element e : elementService.getCharacters()) {
+
+			DvfHeader header;
+
+			if (e instanceof Accessory) {
+				header = dvfReader.loadAccessory(e);
+			} else {
+				header = dvfReader.loadCharacter(e);
+			}
+
+			if (header != null) {
+				characterAnims.add(new CharacterAnimation(e, header));
+			}
+		}
+	}
 }

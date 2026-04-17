@@ -295,6 +295,11 @@ public class FileService {
 	public static void drawAnimations(Display display, PaintEvent e) {
 		animationService.drawAnimations(display, e);
 	}
+	public static void rebuildAnimations() {
+		if (animationService != null && elementService != null) {
+			animationService.rebuild(elementService);
+		}
+	}
 
 	public static void drawElements(Display display, PaintEvent e) {
 		animationService.drawCharacters(display, e);

@@ -57,7 +57,7 @@ public class EditorWindow {
 	public static String exeName;
 
 	private final static String appName = "Desperados Mission Editor";
-	private final static String appVersion = "v1.47, credits to herbert3000";
+	private final static String appVersion = "v1.48, original credits to herbert3000";
 
 	public EditorWindow(MainGUI main) {
 		gameDir = PropertiesHandler.getProperty("gameDir");
@@ -2005,6 +2005,10 @@ public class EditorWindow {
 			FileService.writeElementsFromStringToDvd(text.getText());
 			setConsoleText("Writing ELEM section to DVD completed!");
 			resetCurrentSectionUnsavedChanges();
+
+			// Resincronizar modelo de elementos con el texto actual, para que refleje cualquier corrección automática o cambio que el servicio haya hecho
+        	FileService.readElementsFromString(text.getText());
+			// FileService.rebuildAnimations();
 			
 			// Restaurar la referencia a currentElement desde la lista actualizada
 			if (currentElementId != null) {
@@ -2021,6 +2025,8 @@ public class EditorWindow {
 			}
 			
 			canvas.redraw();
+			canvas.update();
+
 		} catch (ServiceException e) {
 			setConsoleText(e.getMessage());
 		}
