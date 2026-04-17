@@ -2,3 +2,13 @@
 /classes/
 .vscode/bookmarks.json
 
+.gradle/file-system.probe
+.gradle/8.7/executionHistory/executionHistory.bin
+.gradle/8.7/executionHistory/executionHistory.lock
+.gradle/8.7/fileHashes/fileHashes.bin
+.gradle/8.7/fileHashes/fileHashes.lock
+.gradle/8.7/fileHashes/resourceHashesCache.bin
+.gradle/buildOutputCleanup/buildOutputCleanup.lock
+build/distributions/Desperados_Mission_Editor_v1.x-1.0.tar
+build/distributions/Desperados_Mission_Editor_v1.x-1.0.zip
+build/libs/Desperados_Mission_Editor_v1.x-1.0.jar
